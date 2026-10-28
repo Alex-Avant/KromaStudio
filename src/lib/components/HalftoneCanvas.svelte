@@ -2,7 +2,14 @@
   import { WebGpuShader } from 'svader';
   import shaderCode from '../shaders/halftone.wgsl?raw';
   import { bitmapToPackedRgba, loadImage } from '../utils/image';
-  import type { HalftoneCanvasProps, SvaderParameter } from '../types/halftone';
+  import { exportHalftonePng } from '../utils/export';
+  import { buildHalftoneParameters, COLOR_MODE, UNDERBASE_MODE } from '../utils/parameters';
+  import type {
+    HalftoneCanvasProps,
+    HalftoneExportKind,
+    HalftoneExportResult,
+    HalftonePreviewCanvases,
+  } from '../types/halftone';
 
   // Props con valores por defecto para DTF.
   let {
@@ -13,6 +20,11 @@
     dpi = 300,
     underbase = true,
     choke = 1,
+    colorMode = 'mono',
+    blackPoint = 0,
+    whitePoint = 1,
+    shirtColor = '#111111',
+    showUnderbase = true,
     width = '100%',
     height = '100%',
   }: HalftoneCanvasProps = $props();
@@ -62,61 +74,70 @@
     };
   });
 
-  // Índices de binding compartidos con halftone.wgsl.
-  const COLOR_MODE = 0;
-  const UNDERBASE_MODE = 1;
-
-  /**
-   * Construye el array `parameters` de svader. La estructura (número y orden de
-   * bindings) es siempre la misma; sólo cambian los valores. Eso es importante
-   * porque svader crea los buffers al montar y después sólo actualiza su contenido.
-   */
-  function makeParameters(mode: number): SvaderParameter[] {
+  // El builder compartido mantiene el orden de bindings de halftone.wgsl.
+  const parameterValues = $derived.by(() => {
     const pixelData = pixels;
-    if (!pixelData || imageWidth === 0 || imageHeight === 0) return [];
+    if (!pixelData || imageWidth === 0 || imageHeight === 0) return null;
 
-    const safeLpi = Math.max(1, lpi);
-    const safeDpi = Math.max(1, dpi);
-    const safeContrast = Math.max(0, contrast);
-    const safeChoke = Math.min(2, Math.max(0, choke));
-
-    return [
-      { label: 'Resolución', binding: 0, value: 'resolution' },
-      { label: 'LPI', binding: 1, value: new Float32Array([safeLpi]) },
-      {
-        label: 'Ángulo',
-        binding: 2,
-        value: new Float32Array([(angle * Math.PI) / 180]),
-      },
-      { label: 'Contraste', binding: 3, value: new Float32Array([safeContrast]) },
-      { label: 'Choke', binding: 4, value: new Float32Array([safeChoke]) },
-      {
-        label: 'Underbase activo',
-        binding: 5,
-        value: new Float32Array([underbase ? 1 : 0]),
-      },
-      { label: 'Modo de pasada', binding: 6, value: new Float32Array([mode]) },
-      {
-        label: 'Tamaño de imagen',
-        binding: 7,
-        value: new Float32Array([imageWidth, imageHeight]),
-      },
-      { label: 'DPI de salida', binding: 8, value: new Float32Array([safeDpi]) },
-      { label: 'Píxeles RGBA', binding: 9, value: pixelData, storage: true },
-      { label: 'Offset', binding: 10, value: 'offset' },
-    ];
-  }
+    return {
+      imageWidth,
+      imageHeight,
+      pixels: pixelData,
+      lpi,
+      angle,
+      contrast,
+      dpi,
+      underbase,
+      choke,
+      colorMode,
+      blackPoint,
+      whitePoint,
+    };
+  });
 
   // Dos pasadas con el mismo WGSL: color arriba y underbase debajo.
-  const colorParameters = $derived.by(() => makeParameters(COLOR_MODE));
-  const underbaseParameters = $derived.by(() => makeParameters(UNDERBASE_MODE));
+  const colorParameters = $derived.by(() =>
+    parameterValues ? buildHalftoneParameters(parameterValues, COLOR_MODE) : [],
+  );
+  const underbaseParameters = $derived.by(() =>
+    parameterValues ? buildHalftoneParameters(parameterValues, UNDERBASE_MODE) : [],
+  );
 
   const aspectRatio = $derived(
     imageWidth > 0 && imageHeight > 0 ? `${imageWidth} / ${imageHeight}` : '1 / 1',
   );
+
+  // Referencia al contenedor para exponer los canvas del preview al padre.
+  let root: HTMLDivElement | null = $state(null);
+
+  export function getPreviewCanvases(): HalftonePreviewCanvases {
+    return {
+      color: root?.querySelector<HTMLCanvasElement>('.color-layer canvas') ?? null,
+      underbase: root?.querySelector<HTMLCanvasElement>('.underbase-layer canvas') ?? null,
+    };
+  }
+
+  export function exportPng(kind: HalftoneExportKind): Promise<HalftoneExportResult> {
+    return exportHalftonePng(
+      src,
+      {
+        lpi,
+        angle,
+        contrast,
+        dpi,
+        underbase,
+        choke,
+        colorMode,
+        blackPoint,
+        whitePoint,
+        shirtColor,
+      },
+      kind,
+    );
+  }
 </script>
 
-<div class="halftone-canvas" style={`aspect-ratio: ${aspectRatio};`}>
+<div bind:this={root} class="halftone-canvas" style={`aspect-ratio: ${aspectRatio};`}>
   {#if error}
     <div class="status error" role="alert">
       <strong>No se pudo preparar la imagen.</strong>
@@ -131,8 +152,16 @@
       las dos pasadas usen buffers del tamaño correcto.
     -->
     {#key pixels}
-      <!-- Capa inferior: underbase blanco erosionado (choke). -->
-      <div class="layer underbase-layer" aria-hidden="true">
+      <!--
+        Capa inferior: underbase blanco erosionado (choke). Se mantiene montada
+        para que getPreviewCanvases() siempre pueda devolver ambos canvas; el
+        checkbox de preview sólo la oculta visualmente.
+      -->
+      <div
+        class="layer underbase-layer"
+        class:hidden={!underbase || !showUnderbase}
+        aria-hidden="true"
+      >
         <WebGpuShader
           {width}
           {height}
@@ -180,6 +209,10 @@
 
   .underbase-layer {
     z-index: 0;
+  }
+
+  .underbase-layer.hidden {
+    visibility: hidden;
   }
 
   .color-layer {

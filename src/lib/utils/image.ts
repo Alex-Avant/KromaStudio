@@ -54,8 +54,11 @@ export async function loadImage(source: HalftoneImageSource): Promise<LoadedImag
  * R en bits 0-7, G en 8-15, B en 16-23 y A en 24-31.
  * Las imágenes grandes se reducen proporcionalmente antes de leerlas.
  */
-export function bitmapToPackedRgba(bitmap: ImageBitmap): PackedImage {
-  const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(bitmap.width, bitmap.height));
+export function bitmapToPackedRgba(
+  bitmap: ImageBitmap,
+  maxDimension = MAX_IMAGE_DIMENSION,
+): PackedImage {
+  const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
   const width = Math.max(1, Math.round(bitmap.width * scale));
   const height = Math.max(1, Math.round(bitmap.height * scale));
 

@@ -1,11 +1,27 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { HalftoneCanvas, type HalftoneImageSource } from './lib';
+  import {
+    HalftoneCanvas,
+    type HalftoneCanvasHandle,
+    type HalftoneColorMode,
+    type HalftoneExportKind,
+    type HalftoneImageSource,
+  } from './lib';
   import { createDemoImage } from './lib/utils/demo-image';
 
   const FILE_ACCEPT = '.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp';
   const SUPPORTED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
   const SUPPORTED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'];
+  const SHIRT_PRESETS = [
+    { label: 'Negro', color: '#111111' },
+    { label: 'Blanco', color: '#ffffff' },
+    { label: 'Gris', color: '#808080' },
+  ] as const;
+  const EXPORT_LABELS: Record<HalftoneExportKind, string> = {
+    color: 'capa de color',
+    underbase: 'capa blanca',
+    composite: 'composite',
+  };
 
   // Parámetros reactivos del motor.
   let lpi = $state(45);
@@ -14,6 +30,27 @@
   let dpi = $state(300);
   let underbase = $state(true);
   let choke = $state(1);
+  let colorMode = $state<HalftoneColorMode>('mono');
+  let blackPoint = $state(0);
+  let whitePoint = $state(1);
+  const safeWhitePoint = $derived(
+    Math.min(1, Math.max(0.1, whitePoint, blackPoint + 0.01)),
+  );
+
+  // Mantiene el blanco por encima del negro cuando se sube el black point.
+  $effect(() => {
+    const minWhite = Math.max(0.1, blackPoint + 0.01);
+    if (whitePoint < minWhite) whitePoint = minWhite;
+  });
+
+  // Preview y exportación.
+  let shirtColor = $state('#111111');
+  let customShirtColor = $state('#111111');
+  let showUnderbase = $state(true);
+  let exporting = $state<HalftoneExportKind | null>(null);
+  let exportMessage = $state<string | null>(null);
+  let exportError = $state<string | null>(null);
+  let canvasRef = $state<HalftoneCanvasHandle | null>(null);
 
   // La fuente puede ser la demo generada o un archivo local.
   let source = $state<HalftoneImageSource | null>(null);
@@ -58,6 +95,8 @@
     if (!demoBitmap) return;
 
     fileError = null;
+    exportMessage = null;
+    exportError = null;
     selectedName = 'Demo generada';
     source = demoBitmap;
   }
@@ -72,6 +111,8 @@
 
   function selectFile(file: File | undefined) {
     fileError = null;
+    exportMessage = null;
+    exportError = null;
     if (!file) return;
 
     if (file.size === 0) {
@@ -117,6 +158,52 @@
     isDragging = false;
     selectFile(event.dataTransfer?.files[0]);
   }
+
+  function setShirtColor(color: string) {
+    shirtColor = color;
+    customShirtColor = color;
+  }
+
+  function handleCustomColor(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    customShirtColor = input.value;
+    setShirtColor(input.value);
+  }
+
+  function downloadBlob(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  async function downloadPng(kind: HalftoneExportKind) {
+    if (!canvasRef) {
+      exportError = 'La vista previa aún no está lista para exportar.';
+      return;
+    }
+
+    exporting = kind;
+    exportMessage = null;
+    exportError = null;
+
+    try {
+      const result = await canvasRef.exportPng(kind);
+      downloadBlob(result.blob, result.filename);
+      exportMessage = `Descargado: ${result.filename} · ${result.width} × ${result.height} px`;
+    } catch (cause) {
+      exportError =
+        cause instanceof Error
+          ? `No se pudo exportar: ${cause.message}`
+          : 'No se pudo generar la exportación.';
+    } finally {
+      exporting = null;
+    }
+  }
 </script>
 
 <svelte:head>
@@ -142,6 +229,7 @@
       <div
         class="checkerboard"
         class:dragging={isDragging}
+        style={`--shirt-color: ${shirtColor};`}
         role="region"
         aria-label="Vista previa y zona para soltar imágenes"
         ondragenter={handleDragEnter}
@@ -153,6 +241,7 @@
           <p class="load-error">{error}</p>
         {:else if source}
           <HalftoneCanvas
+            bind:this={canvasRef}
             src={source}
             {lpi}
             {angle}
@@ -160,6 +249,11 @@
             {dpi}
             {underbase}
             {choke}
+            {colorMode}
+            {blackPoint}
+            whitePoint={safeWhitePoint}
+            {shirtColor}
+            {showUnderbase}
           />
         {:else}
           <p class="loading">Generando imagen de prueba…</p>
@@ -170,9 +264,9 @@
         {/if}
       </div>
       <p class="preview-note">
-        El damero muestra las zonas transparentes. El blanco es la capa de
-        underbase; los puntos negros, la capa de color. También puedes arrastrar
-        una imagen sobre la vista previa.
+        El fondo simula la camiseta. El blanco es la capa de underbase; los
+        puntos negros, la capa de color. También puedes arrastrar una imagen
+        sobre la vista previa.
       </p>
     </div>
 
@@ -229,28 +323,152 @@
       </fieldset>
 
       <fieldset>
+        <legend>Color y niveles</legend>
+
+        <label>
+          <span>Modo de color</span>
+          <select bind:value={colorMode}>
+            <option value="color">Color Original</option>
+            <option value="mono">Blanco y Negro (Monocromo)</option>
+          </select>
+        </label>
+
+        <label>
+          <span>Nivel de Negro <output>{blackPoint.toFixed(2)}</output></span>
+          <input
+            type="range"
+            min="0"
+            max="0.9"
+            step="0.01"
+            bind:value={blackPoint}
+          />
+        </label>
+
+        <label>
+          <span>Nivel de Blanco <output>{safeWhitePoint.toFixed(2)}</output></span>
+          <input
+            type="range"
+            min={Math.max(0.1, blackPoint + 0.01).toFixed(2)}
+            max="1"
+            step="0.01"
+            bind:value={whitePoint}
+          />
+        </label>
+
+        <p class="hint">
+          El nivel de negro vuelve transparente el fondo oscuro; el nivel de
+          blanco sube el contraste antes de aplicar el semitono.
+        </p>
+      </fieldset>
+
+      <fieldset>
         <legend>Underbase</legend>
 
         <label class="switch">
           <input type="checkbox" bind:checked={underbase} />
-          <span>Activar underbase blanco</span>
+          <span>Underbase activo</span>
+        </label>
+
+        <label class="switch">
+          <input type="checkbox" bind:checked={showUnderbase} disabled={!underbase} />
+          <span>Mostrar underbase en preview</span>
         </label>
 
         <label>
-          <span>Choke <output>{choke} px</output></span>
+          <span>Choke <output>{choke.toFixed(1)} px</output></span>
           <input
             type="range"
             min="0"
-            max="2"
-            step="1"
+            max="3"
+            step="0.5"
             bind:value={choke}
             disabled={!underbase}
           />
         </label>
 
         <p class="hint">
-          El choke erosiona la máscara alfa del underbase para que el blanco no
-          asome en los bordes del diseño.
+          El underbase solo se genera bajo tinta visible y se erosiona con el
+          choke para que el blanco no asome en los bordes del diseño.
+        </p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Camiseta</legend>
+
+        <div class="shirt-presets" role="group" aria-label="Color de camiseta">
+          {#each SHIRT_PRESETS as preset}
+            <button
+              type="button"
+              class="shirt-swatch"
+              class:active={shirtColor === preset.color}
+              style={`--swatch: ${preset.color};`}
+              aria-pressed={shirtColor === preset.color}
+              onclick={() => setShirtColor(preset.color)}
+            >
+              <span class="swatch-dot"></span>
+              {preset.label}
+            </button>
+          {/each}
+        </div>
+
+        <label class="color-picker">
+          <span>Color personalizado</span>
+          <input
+            type="color"
+            value={customShirtColor}
+            oninput={handleCustomColor}
+          />
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Exportar PNG</legend>
+
+        <div class="export-actions">
+          <button
+            type="button"
+            onclick={() => downloadPng('color')}
+            disabled={!source || exporting !== null}
+          >
+            {exporting === 'color' ? 'Procesando…' : 'Descargar color'}
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            onclick={() => downloadPng('underbase')}
+            disabled={!source || exporting !== null}
+          >
+            {exporting === 'underbase' ? 'Procesando…' : 'Descargar blanco'}
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            onclick={() => downloadPng('composite')}
+            disabled={!source || exporting !== null}
+          >
+            {exporting === 'composite' ? 'Procesando…' : 'Descargar composite'}
+          </button>
+        </div>
+
+        {#if exporting}
+          <p class="export-status" role="status">
+            <span class="spinner" aria-hidden="true"></span>
+            Procesando {EXPORT_LABELS[exporting]}…
+          </p>
+        {/if}
+
+        {#if exportMessage}
+          <p class="export-success" role="status">{exportMessage}</p>
+        {/if}
+
+        {#if exportError}
+          <p class="file-error" role="alert">{exportError}</p>
+        {/if}
+
+        <p class="hint">
+          La exportación se renderiza a la resolución de la imagen (hasta el
+          límite de la GPU) con el DPI seleccionado. Los PNG de color y blanco
+          salen con fondo transparente.
         </p>
       </fieldset>
 
@@ -310,18 +528,7 @@
     border: 1px solid #2a2c33;
     border-radius: 18px;
     overflow: hidden;
-    background-color: #15171c;
-    background-image:
-      linear-gradient(45deg, #1d2027 25%, transparent 25%),
-      linear-gradient(-45deg, #1d2027 25%, transparent 25%),
-      linear-gradient(45deg, transparent 75%, #1d2027 75%),
-      linear-gradient(-45deg, transparent 75%, #1d2027 75%);
-    background-size: 22px 22px;
-    background-position:
-      0 0,
-      0 11px,
-      11px -11px,
-      -11px 0;
+    background-color: var(--shirt-color, #15171c);
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
   }
 
@@ -427,6 +634,22 @@
     opacity: 0.35;
   }
 
+  select {
+    width: 100%;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid #2a2c33;
+    border-radius: 8px;
+    background: #0f1115;
+    color: #f5f0e8;
+    font: 0.85rem/1.2 system-ui, sans-serif;
+    cursor: pointer;
+  }
+
+  select:focus-visible {
+    outline: 2px solid #f0b45f;
+    outline-offset: 2px;
+  }
+
   .switch {
     flex-direction: row;
     align-items: center;
@@ -439,13 +662,24 @@
     accent-color: #f0b45f;
   }
 
-  .file-actions {
+  .switch input:disabled {
+    opacity: 0.4;
+  }
+
+  .file-actions,
+  .export-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
   }
 
-  .file-actions button {
+  .export-actions {
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+
+  .file-actions button,
+  .export-actions button {
     flex: 1 1 120px;
     padding: 0.65rem 0.75rem;
     border: 1px solid #f0b45f;
@@ -456,24 +690,116 @@
     cursor: pointer;
   }
 
-  .file-actions button.secondary {
+  .export-actions button {
+    flex: none;
+    width: 100%;
+  }
+
+  .file-actions button.secondary,
+  .export-actions button.secondary {
     border-color: #4a3b28;
     background: transparent;
     color: #f0b45f;
   }
 
-  .file-actions button:hover:not(:disabled) {
+  .file-actions button:hover:not(:disabled),
+  .export-actions button:hover:not(:disabled) {
     filter: brightness(1.08);
   }
 
-  .file-actions button:focus-visible {
+  .file-actions button:focus-visible,
+  .export-actions button:focus-visible,
+  .shirt-swatch:focus-visible {
     outline: 2px solid #f0b45f;
     outline-offset: 2px;
   }
 
-  .file-actions button:disabled {
+  .file-actions button:disabled,
+  .export-actions button:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+  }
+
+  .shirt-presets {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .shirt-swatch {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.55rem 0.4rem;
+    border: 1px solid #2a2c33;
+    border-radius: 9px;
+    background: #0f1115;
+    color: #d7d1c7;
+    font: 0.78rem/1.2 system-ui, sans-serif;
+    cursor: pointer;
+  }
+
+  .shirt-swatch.active {
+    border-color: #f0b45f;
+    box-shadow: inset 0 0 0 1px #f0b45f;
+    color: #f5f0e8;
+  }
+
+  .swatch-dot {
+    width: 0.9rem;
+    height: 0.9rem;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 50%;
+    background: var(--swatch);
+  }
+
+  .color-picker {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .color-picker input[type='color'] {
+    width: 2.6rem;
+    height: 1.9rem;
+    padding: 0;
+    border: 1px solid #2a2c33;
+    border-radius: 7px;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .export-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    font: 0.8rem/1.4 system-ui, sans-serif;
+    color: #f0b45f;
+  }
+
+  .spinner {
+    width: 0.9rem;
+    height: 0.9rem;
+    border: 2px solid rgba(240, 180, 95, 0.25);
+    border-top-color: #f0b45f;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  .export-success {
+    margin: 0;
+    font: 0.78rem/1.4 system-ui, sans-serif;
+    color: #9bd6a3;
+    overflow-wrap: anywhere;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .file-name {
