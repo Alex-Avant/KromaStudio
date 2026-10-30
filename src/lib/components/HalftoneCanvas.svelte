@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import { WebGpuShader } from 'svader';
   import shaderCode from '../shaders/halftone.wgsl?raw';
   import { bitmapToPackedRgba, loadImage } from '../utils/image';
@@ -17,6 +18,10 @@
     lpi = 45,
     angle = 45,
     contrast = 1,
+    gamma = 1,
+    minDot = 0.01,
+    shadowPoint = 0.97,
+    dotShape = 'circle',
     dpi = 300,
     underbase = true,
     choke = 1,
@@ -25,6 +30,7 @@
     whitePoint = 1,
     shirtColor = '#111111',
     showUnderbase = true,
+    previewMode = 'fit',
     width = '100%',
     height = '100%',
   }: HalftoneCanvasProps = $props();
@@ -33,8 +39,20 @@
   let pixels = $state<Uint32Array<ArrayBuffer> | null>(null);
   let imageWidth = $state(0);
   let imageHeight = $state(0);
+  let logicalWidth = $state(0);
+  let logicalHeight = $state(0);
   let loading = $state(true);
   let error = $state<string | null>(null);
+
+  // Bitmap original retenido para la exportación: así no hay que volver a
+  // decodificar el archivo (algunos pickers de Android no permiten hacerlo
+  // más tarde). Sólo cerramos los bitmaps que creamos nosotros.
+  let activeBitmap = $state<ImageBitmap | null>(null);
+  let activeOwned = $state(false);
+
+  onDestroy(() => {
+    if (activeOwned && activeBitmap) activeBitmap.close();
+  });
 
   // Carga la imagen cada vez que cambia `src`. Si el componente se destruye o
   // la fuente cambia antes de terminar, la carga en curso se descarta.
@@ -54,17 +72,28 @@
 
         if (cancelled) return;
 
+        if (activeBitmap !== null && activeBitmap !== loaded.bitmap && activeOwned) {
+          activeBitmap.close();
+        }
+        activeBitmap = loaded.bitmap;
+        activeOwned = loaded.owned;
+
         pixels = prepared.pixels;
         imageWidth = prepared.width;
         imageHeight = prepared.height;
+        logicalWidth = prepared.logicalWidth;
+        logicalHeight = prepared.logicalHeight;
       } catch (cause) {
         if (!cancelled) {
           pixels = null;
           error = cause instanceof Error ? cause.message : 'Error desconocido al cargar la imagen.';
         }
       } finally {
-        // Sólo liberamos los bitmaps creados por nosotros (URLs o archivos/Blob).
-        if (loaded?.owned) loaded.bitmap.close();
+        // Sólo liberamos los bitmaps creados por nosotros que no quedaron
+        // retenidos para la exportación.
+        if (loaded?.owned && loaded.bitmap !== activeBitmap) {
+          loaded.bitmap.close();
+        }
         if (!cancelled) loading = false;
       }
     })();
@@ -82,10 +111,16 @@
     return {
       imageWidth,
       imageHeight,
+      outputWidth: logicalWidth,
+      outputHeight: logicalHeight,
       pixels: pixelData,
       lpi,
       angle,
       contrast,
+      gamma,
+      minDot,
+      shadowPoint,
+      dotShape,
       dpi,
       underbase,
       choke,
@@ -104,7 +139,12 @@
   );
 
   const aspectRatio = $derived(
-    imageWidth > 0 && imageHeight > 0 ? `${imageWidth} / ${imageHeight}` : '1 / 1',
+    logicalWidth > 0 && logicalHeight > 0 ? `${logicalWidth} / ${logicalHeight}` : '1 / 1',
+  );
+  const viewportStyle = $derived(
+    previewMode === 'actual' && logicalWidth > 0 && logicalHeight > 0
+      ? `aspect-ratio: ${aspectRatio}; width: ${logicalWidth}px; height: ${logicalHeight}px;`
+      : `aspect-ratio: ${aspectRatio};`,
   );
 
   // Referencia al contenedor para exponer los canvas del preview al padre.
@@ -124,6 +164,10 @@
         lpi,
         angle,
         contrast,
+        gamma,
+        minDot,
+        shadowPoint,
+        dotShape,
         dpi,
         underbase,
         choke,
@@ -133,11 +177,12 @@
         shirtColor,
       },
       kind,
+      activeBitmap ?? undefined,
     );
   }
 </script>
 
-<div bind:this={root} class="halftone-canvas" style={`aspect-ratio: ${aspectRatio};`}>
+<div bind:this={root} class="halftone-canvas" style={viewportStyle}>
   {#if error}
     <div class="status error" role="alert">
       <strong>No se pudo preparar la imagen.</strong>

@@ -3,10 +3,12 @@ export type {
   HalftoneCanvasHandle,
   HalftoneCanvasProps,
   HalftoneColorMode,
+  HalftoneDotShape,
   HalftoneExportKind,
   HalftoneExportResult,
   HalftoneImageSource,
   HalftoneOptions,
   HalftonePreviewCanvases,
+  HalftonePreviewMode,
   UnderbaseOptions,
 } from './types/halftone';

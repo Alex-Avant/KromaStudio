@@ -1,47 +1,48 @@
-# Svelte + TS + Vite
+# KromaStudio
 
-This template should help get you started developing with Svelte and TypeScript in Vite.
+Laboratorio local-first de semitonos para DTF, construido con Svelte 5, TypeScript, Vite, svader y WebGPU. Las imágenes se procesan en el navegador y no se suben a ningún servidor.
 
-## Recommended IDE Setup
+## Comandos
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
-
-## Need an official Svelte framework?
-
-Check out [SvelteKit](https://github.com/sveltejs/kit#readme), which is also powered by Vite. Deploy anywhere with its serverless-first approach and adapt to various platforms, with out of the box support for TypeScript, SCSS, and Less, and easily-added support for mdsvex, GraphQL, PostCSS, Tailwind CSS, and more.
-
-## Technical considerations
-
-**Why use this over SvelteKit?**
-
-- It brings its own routing solution which might not be preferable for some users.
-- It is first and foremost a framework that just happens to use Vite under the hood, not a Vite app.
-
-This template contains as little as possible to get started with Vite + TypeScript + Svelte, while taking into account the developer experience with regards to HMR and intellisense. It demonstrates capabilities on par with the other `create-vite` templates and is a good starting point for beginners dipping their toes into a Vite + Svelte project.
-
-Should you later need the extended capabilities and extensibility provided by SvelteKit, the template has been structured similarly to SvelteKit so that it is easy to migrate.
-
-**Why `global.d.ts` instead of `compilerOptions.types` inside `jsconfig.json` or `tsconfig.json`?**
-
-Setting `compilerOptions.types` shuts out all other types not explicitly listed in the configuration. Using triple-slash references keeps the default TypeScript setting of accepting type information from the entire workspace, while also adding `svelte` and `vite/client` type information.
-
-**Why include `.vscode/extensions.json`?**
-
-Other templates indirectly recommend extensions via the README, but this file allows VS Code to prompt the user to install the recommended extension upon opening the project.
-
-**Why enable `allowJs` in the TS template?**
-
-While `allowJs: false` would indeed prevent the use of `.js` files in the project, it does not prevent the use of JavaScript syntax in `.svelte` files. In addition, it would force `checkJs: false`, bringing the worst of both worlds: not being able to guarantee the entire codebase is TypeScript, and also having worse typechecking for the existing JavaScript. In addition, there are valid use cases in which a mixed codebase may be relevant.
-
-**Why is HMR not preserving my local component state?**
-
-HMR state preservation comes with a number of gotchas! It has been disabled by default in both `svelte-hmr` and `@sveltejs/vite-plugin-svelte` due to its often surprising behavior. You can read the details [here](https://github.com/rixo/svelte-hmr#svelte-hmr).
-
-If you have state that's important to retain within a component, consider creating an external store which would not be replaced by HMR.
-
-```ts
-// store.ts
-// An extremely simple external store
-import { writable } from 'svelte/store'
-export default writable(0)
+```sh
+npm ci
+npm run dev
+npm run check
+npm run build
+npm run preview
 ```
+
+En Termux, si un script responde `<bin>: not found`, ejecuta npm con `LD_PRELOAD=$PREFIX/lib/libtermux-exec.so`.
+
+## Motor de semitono
+
+- Rejilla AM configurable mediante LPI, DPI y ángulo.
+- Puntos de círculo, elipse o diamante.
+- Una muestra de color, luminancia y alfa por celda para evitar puntos cortados por el contenido fuente.
+- Contraste, niveles, compensación tonal gamma, punto mínimo y sombras sólidas.
+- Crecimiento de punto clásico: la trama se invierte por encima del 50 % de cobertura (el hueco se cierra hacia sólido), sin solapamiento de puntos vecinos.
+- El punto mínimo se funde suavemente en vez de desaparecer de golpe.
+- El alfa fuente modifica el área del punto en vez de crear grandes regiones de tinta semitransparente.
+- Filtrado bilinear con RGB premultiplicado y antialiasing basado en derivadas.
+- Modo monocromo negro o color original. El modo color es un efecto monocanal, no una separación CMYK.
+- Underbase blanco y choke calculados a partir de la misma máscara de puntos que la capa de color.
+
+Cuando la trama no se puede resolver en el preview, el shader muestra su cobertura media en lugar de cambiar silenciosamente el LPI. Una exportación que necesita menos de un píxel por celda se rechaza con un error explicativo.
+
+## Preview y exportación
+
+El buffer de preview se limita a 2048 px por lado, pero la rejilla usa las dimensiones lógicas originales de la imagen. Preview y exportación conservan así el mismo número y fase de celdas aunque utilicen buffers de muestreo diferentes.
+
+La escala **Ajustar** adapta la imagen al panel; **100 %** muestra un píxel lógico por píxel CSS y permite desplazarse por la imagen.
+
+Se pueden descargar PNG transparentes de color y underbase, además de un composite sobre el color de camiseta seleccionado. El DPI controla la geometría de la trama; el PNG no incluye metadatos físicos de resolución.
+
+La demo incorpora rampas tonal y de alfa, parches de cobertura, color, texto y transparencia para comparar cambios del motor.
+
+## Alcance de producción
+
+KromaStudio genera una trama artística en el PNG; no sustituye el screening, los perfiles ICC ni la calibración del RIP. El punto mínimo imprimible y la ganancia de punto deben validarse con la impresora, tinta, película, polvo, curado y prenda reales. Evita aplicar una segunda compensación si el RIP ya la realiza.
+
+## Verificación
+
+`npm run check` y `npm run build` no compilan el WGSL importado como texto. Después de cambiar el shader, valida también `getCompilationInfo()` y la creación del pipeline en un navegador con WebGPU. Las pruebas visuales y de exportación deben hacerse en un navegador WebGPU real; el submit/toBlob de Chromium headless con SwiftShader en Termux tiene limitaciones conocidas.

@@ -4,8 +4,10 @@
     HalftoneCanvas,
     type HalftoneCanvasHandle,
     type HalftoneColorMode,
+    type HalftoneDotShape,
     type HalftoneExportKind,
     type HalftoneImageSource,
+    type HalftonePreviewMode,
   } from './lib';
   import { createDemoImage } from './lib/utils/demo-image';
 
@@ -27,7 +29,12 @@
   let lpi = $state(45);
   let angle = $state(45);
   let contrast = $state(1);
+  let gamma = $state(1);
+  let minDot = $state(0.01);
+  let shadowPoint = $state(0.97);
+  let dotShape = $state<HalftoneDotShape>('circle');
   let dpi = $state(300);
+  const cellPitch = $derived(dpi / Math.max(lpi, 1));
   let underbase = $state(true);
   let choke = $state(1);
   let colorMode = $state<HalftoneColorMode>('mono');
@@ -47,6 +54,7 @@
   let shirtColor = $state('#111111');
   let customShirtColor = $state('#111111');
   let showUnderbase = $state(true);
+  let previewMode = $state<HalftonePreviewMode>('fit');
   let exporting = $state<HalftoneExportKind | null>(null);
   let exportMessage = $state<string | null>(null);
   let exportError = $state<string | null>(null);
@@ -229,6 +237,7 @@
       <div
         class="checkerboard"
         class:dragging={isDragging}
+        class:actual={previewMode === 'actual'}
         style={`--shirt-color: ${shirtColor};`}
         role="region"
         aria-label="Vista previa y zona para soltar imágenes"
@@ -246,6 +255,10 @@
             {lpi}
             {angle}
             {contrast}
+            {gamma}
+            {minDot}
+            {shadowPoint}
+            {dotShape}
             {dpi}
             {underbase}
             {choke}
@@ -254,6 +267,7 @@
             whitePoint={safeWhitePoint}
             {shirtColor}
             {showUnderbase}
+            {previewMode}
           />
         {:else}
           <p class="loading">Generando imagen de prueba…</p>
@@ -262,6 +276,25 @@
         {#if isDragging}
           <div class="drop-overlay">Suelta la imagen aquí</div>
         {/if}
+      </div>
+      <div class="preview-toolbar" role="group" aria-label="Escala de la vista previa">
+        <span>Escala</span>
+        <button
+          type="button"
+          class:active={previewMode === 'fit'}
+          aria-pressed={previewMode === 'fit'}
+          onclick={() => (previewMode = 'fit')}
+        >
+          Ajustar
+        </button>
+        <button
+          type="button"
+          class:active={previewMode === 'actual'}
+          aria-pressed={previewMode === 'actual'}
+          onclick={() => (previewMode = 'actual')}
+        >
+          100 %
+        </button>
       </div>
       <p class="preview-note">
         El fondo simula la camiseta. El blanco es la capa de underbase; los
@@ -302,6 +335,15 @@
         <legend>Trama</legend>
 
         <label>
+          <span>Forma de punto</span>
+          <select bind:value={dotShape}>
+            <option value="circle">Círculo</option>
+            <option value="ellipse">Elipse</option>
+            <option value="diamond">Diamante</option>
+          </select>
+        </label>
+
+        <label>
           <span>LPI <output>{lpi}</output></span>
           <input type="range" min="10" max="120" step="1" bind:value={lpi} />
         </label>
@@ -320,6 +362,19 @@
           <span>DPI de salida <output>{dpi}</output></span>
           <input type="range" min="72" max="600" step="1" bind:value={dpi} />
         </label>
+
+        <p class="hint">Pitch lógico: {cellPitch.toFixed(2)} px por celda.</p>
+        {#if cellPitch < 1}
+          <p class="file-error" role="alert">
+            Esta combinación no se puede exportar: necesita menos de un píxel por celda.
+            Sube los DPI o baja los LPI.
+          </p>
+        {:else if cellPitch < 2}
+          <p class="hint">
+            La trama tiene menos de dos píxeles por celda; el preview mostrará cobertura
+            media y la exportación puede perder definición.
+          </p>
+        {/if}
       </fieldset>
 
       <fieldset>
@@ -331,6 +386,21 @@
             <option value="color">Color Original</option>
             <option value="mono">Blanco y Negro (Monocromo)</option>
           </select>
+        </label>
+
+        <label>
+          <span>Compensación tonal <output>{gamma.toFixed(2)}</output></span>
+          <input type="range" min="0.4" max="2.5" step="0.05" bind:value={gamma} />
+        </label>
+
+        <label>
+          <span>Punto mínimo <output>{(minDot * 100).toFixed(1)} %</output></span>
+          <input type="range" min="0" max="0.2" step="0.005" bind:value={minDot} />
+        </label>
+
+        <label>
+          <span>Sombras sólidas <output>{(shadowPoint * 100).toFixed(0)} %</output></span>
+          <input type="range" min="0.8" max="1" step="0.01" bind:value={shadowPoint} />
         </label>
 
         <label>
@@ -356,8 +426,10 @@
         </label>
 
         <p class="hint">
-          El nivel de negro vuelve transparente el fondo oscuro; el nivel de
-          blanco sube el contraste antes de aplicar el semitono.
+          La compensación tonal ajusta el área de los puntos; por encima de 1 reduce
+          los tonos medios. El punto mínimo descarta luces débiles y las sombras
+          sólidas definen el salto a cobertura completa. El nivel de negro recorta
+          el fondo oscuro.
         </p>
       </fieldset>
 
@@ -428,7 +500,7 @@
           <button
             type="button"
             onclick={() => downloadPng('color')}
-            disabled={!source || exporting !== null}
+            disabled={!source || exporting !== null || cellPitch < 1}
           >
             {exporting === 'color' ? 'Procesando…' : 'Descargar color'}
           </button>
@@ -436,7 +508,7 @@
             type="button"
             class="secondary"
             onclick={() => downloadPng('underbase')}
-            disabled={!source || exporting !== null}
+            disabled={!source || !underbase || exporting !== null || cellPitch < 1}
           >
             {exporting === 'underbase' ? 'Procesando…' : 'Descargar blanco'}
           </button>
@@ -444,7 +516,7 @@
             type="button"
             class="secondary"
             onclick={() => downloadPng('composite')}
-            disabled={!source || exporting !== null}
+            disabled={!source || exporting !== null || cellPitch < 1}
           >
             {exporting === 'composite' ? 'Procesando…' : 'Descargar composite'}
           </button>
@@ -536,6 +608,12 @@
     border-color: #f0b45f;
   }
 
+  .checkerboard.actual {
+    max-height: 80vh;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
   .drop-overlay {
     position: absolute;
     inset: 0;
@@ -564,6 +642,39 @@
 
   .load-error {
     color: #ffb4a8;
+  }
+
+  .preview-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.75rem;
+    font: 0.78rem/1.3 ui-monospace, monospace;
+    color: #7f7a73;
+  }
+
+  .preview-toolbar span {
+    margin-right: auto;
+  }
+
+  .preview-toolbar button {
+    padding: 0.4rem 0.65rem;
+    border: 1px solid #2a2c33;
+    border-radius: 7px;
+    background: #14161b;
+    color: #a8a29a;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .preview-toolbar button.active {
+    border-color: #f0b45f;
+    color: #f0b45f;
+  }
+
+  .preview-toolbar button:focus-visible {
+    outline: 2px solid #f0b45f;
+    outline-offset: 2px;
   }
 
   .preview-note {

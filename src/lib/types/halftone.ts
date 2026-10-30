@@ -4,6 +4,12 @@ export type HalftoneImageSource = ImageBitmap | Blob | string;
 /** Color de los puntos del semitono. */
 export type HalftoneColorMode = 'color' | 'mono';
 
+/** Geometría disponible para los puntos de la trama. */
+export type HalftoneDotShape = 'circle' | 'ellipse' | 'diamond';
+
+/** Escala de la vista previa: ajustada al panel o un píxel lógico por píxel CSS. */
+export type HalftonePreviewMode = 'fit' | 'actual';
+
 /** Parámetros del motor de semitono. */
 export interface HalftoneOptions {
   /** Líneas por pulgada de la trama. DTF suele trabajar entre 35 y 60 LPI. */
@@ -12,6 +18,14 @@ export interface HalftoneOptions {
   angle: number;
   /** Multiplicador de contraste alrededor de 0.5. 1 = sin cambios. */
   contrast: number;
+  /** Exponente de cobertura; valores mayores reducen los tonos medios. */
+  gamma: number;
+  /** Cobertura mínima; los puntos más débiles se descartan. */
+  minDot: number;
+  /** Cobertura a partir de la cual la celda se vuelve sólida. */
+  shadowPoint: number;
+  /** Forma geométrica de los puntos. */
+  dotShape: HalftoneDotShape;
   /** Resolución de salida en píxeles por pulgada. */
   dpi: number;
   /** Color original de la imagen o monocromo negro. */
@@ -36,6 +50,10 @@ export interface HalftoneCanvasProps {
   lpi?: number;
   angle?: number;
   contrast?: number;
+  gamma?: number;
+  minDot?: number;
+  shadowPoint?: number;
+  dotShape?: HalftoneDotShape;
   dpi?: number;
   underbase?: boolean;
   choke?: number;
@@ -44,6 +62,7 @@ export interface HalftoneCanvasProps {
   whitePoint?: number;
   shirtColor?: string;
   showUnderbase?: boolean;
+  previewMode?: HalftonePreviewMode;
   width?: string;
   height?: string;
 }

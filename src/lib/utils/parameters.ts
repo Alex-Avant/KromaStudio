@@ -1,4 +1,4 @@
-import type { HalftoneColorMode, SvaderParameter } from '../types/halftone';
+import type { HalftoneColorMode, HalftoneDotShape, SvaderParameter } from '../types/halftone';
 
 export const COLOR_MODE = 0;
 export const UNDERBASE_MODE = 1;
@@ -6,10 +6,16 @@ export const UNDERBASE_MODE = 1;
 export interface HalftoneParameterValues {
   imageWidth: number;
   imageHeight: number;
+  outputWidth: number;
+  outputHeight: number;
   pixels: Uint32Array<ArrayBuffer>;
   lpi: number;
   angle: number;
   contrast: number;
+  gamma: number;
+  minDot: number;
+  shadowPoint: number;
+  dotShape: HalftoneDotShape;
   dpi: number;
   underbase: boolean;
   choke: number;
@@ -33,11 +39,21 @@ export function buildHalftoneParameters(
   const safeLpi = Math.max(1, input.lpi);
   const safeDpi = Math.max(1, input.dpi);
   const safeContrast = Math.max(0, input.contrast);
+  const safeGamma = Math.min(5, Math.max(0.1, input.gamma));
+  const safeShadow = Math.min(1, Math.max(0.5, input.shadowPoint));
+  const safeMinDot = Math.min(
+    0.49,
+    Math.max(0, input.minDot),
+    Math.max(0, safeShadow - 0.01),
+  );
   const safeChoke = Math.min(3, Math.max(0, input.choke));
   const safeBlack = Math.min(0.9, Math.max(0, input.blackPoint));
   const requestedWhite = Math.min(1, Math.max(0.1, input.whitePoint));
   const safeWhite = Math.min(1, Math.max(requestedWhite, safeBlack + 0.01));
+  const safeOutputWidth = Math.max(1, input.outputWidth);
+  const safeOutputHeight = Math.max(1, input.outputHeight);
   const colorMode = input.colorMode === 'color' ? 0 : 1;
+  const dotShape = input.dotShape === 'ellipse' ? 1 : input.dotShape === 'diamond' ? 2 : 0;
 
   return [
     { label: 'Resolución', binding: 0, value: 'resolution' },
@@ -47,7 +63,11 @@ export function buildHalftoneParameters(
       binding: 2,
       value: new Float32Array([(input.angle * Math.PI) / 180]),
     },
-    { label: 'Contraste', binding: 3, value: new Float32Array([safeContrast]) },
+    {
+      label: 'Contraste, gamma y límites de punto',
+      binding: 3,
+      value: new Float32Array([safeContrast, safeGamma, safeMinDot, safeShadow]),
+    },
     { label: 'Choke', binding: 4, value: new Float32Array([safeChoke]) },
     {
       label: 'Underbase activo',
@@ -56,9 +76,14 @@ export function buildHalftoneParameters(
     },
     { label: 'Modo de pasada', binding: 6, value: new Uint32Array([mode]) },
     {
-      label: 'Tamaño de imagen',
+      label: 'Tamaño de buffer y salida lógica',
       binding: 7,
-      value: new Float32Array([input.imageWidth, input.imageHeight]),
+      value: new Float32Array([
+        input.imageWidth,
+        input.imageHeight,
+        safeOutputWidth,
+        safeOutputHeight,
+      ]),
     },
     { label: 'DPI de salida', binding: 8, value: new Float32Array([safeDpi]) },
     { label: 'Píxeles RGBA', binding: 9, value: input.pixels, storage: true },
@@ -69,9 +94,9 @@ export function buildHalftoneParameters(
       value: new Uint32Array([colorMode]),
     },
     {
-      label: 'Niveles de negro y blanco',
+      label: 'Niveles y forma de punto',
       binding: 12,
-      value: new Float32Array([safeBlack, safeWhite]),
+      value: new Float32Array([safeBlack, safeWhite, dotShape, 0]),
     },
   ];
 }

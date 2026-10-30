@@ -8,18 +8,58 @@ export interface LoadedImage {
 
 export interface PackedImage {
   pixels: Uint32Array<ArrayBuffer>;
+  /** Dimensiones del buffer reducido que se sube a la GPU. */
   width: number;
   height: number;
+  /** Dimensiones lógicas de salida antes de reducir el buffer. */
+  logicalWidth: number;
+  logicalHeight: number;
 }
 
 // Deja margen para dos storage buffers (color y underbase) en GPUs móviles.
 const MAX_IMAGE_DIMENSION = 2048;
 
-async function decodeImage(blob: Blob): Promise<ImageBitmap> {
+async function decodeImage(blob: Blob, name?: string): Promise<ImageBitmap> {
   try {
     return await createImageBitmap(blob);
   } catch {
-    throw new Error('No se pudo decodificar la imagen. Usa un PNG, JPG o WebP válido.');
+    try {
+      return await decodeWithImageElement(blob);
+    } catch {
+      const detail = name ? ` «${name}»` : '';
+      throw new Error(
+        `No se pudo decodificar la imagen${detail}. Usa un PNG, JPG o WebP válido.`,
+      );
+    }
+  }
+}
+
+// Respaldo para archivos que createImageBitmap rechaza pero el navegador sí
+// sabe mostrar (algunos pickers de Android, JPEG con perfiles atípicos, etc.).
+// Decodifica con un <img> y convierte el resultado a ImageBitmap por canvas.
+async function decodeWithImageElement(blob: Blob): Promise<ImageBitmap> {
+  const url = URL.createObjectURL(blob);
+  try {
+    return await new Promise<ImageBitmap>((resolve, reject) => {
+      const image = new Image();
+      image.decoding = 'async';
+      image.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+        const context = canvas.getContext('2d');
+        if (!context) {
+          reject(new Error('No se pudo crear el contexto 2D para decodificar.'));
+          return;
+        }
+        context.drawImage(image, 0, 0);
+        createImageBitmap(canvas).then(resolve, reject);
+      };
+      image.onerror = () => reject(new Error('El navegador no pudo mostrar la imagen.'));
+      image.src = url;
+    });
+  } finally {
+    URL.revokeObjectURL(url);
   }
 }
 
@@ -43,7 +83,8 @@ export async function loadImage(source: HalftoneImageSource): Promise<LoadedImag
   }
 
   if (source instanceof Blob) {
-    return { bitmap: await decodeImage(source), owned: true };
+    const name = source instanceof File ? source.name : undefined;
+    return { bitmap: await decodeImage(source, name), owned: true };
   }
 
   throw new Error('La fuente debe ser una URL, un archivo o un ImageBitmap válido.');
@@ -81,5 +122,7 @@ export function bitmapToPackedRgba(
     pixels: new Uint32Array(data.buffer as ArrayBuffer, data.byteOffset, width * height),
     width,
     height,
+    logicalWidth: bitmap.width,
+    logicalHeight: bitmap.height,
   };
 }

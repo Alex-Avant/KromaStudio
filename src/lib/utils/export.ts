@@ -1,6 +1,7 @@
 import shaderCode from '../shaders/halftone.wgsl?raw';
 import type {
   HalftoneColorMode,
+  HalftoneDotShape,
   HalftoneExportKind,
   HalftoneExportResult,
   HalftoneImageSource,
@@ -13,6 +14,10 @@ export interface HalftoneExportOptions {
   lpi: number;
   angle: number;
   contrast: number;
+  gamma: number;
+  minDot: number;
+  shadowPoint: number;
+  dotShape: HalftoneDotShape;
   dpi: number;
   underbase: boolean;
   choke: number;
@@ -47,9 +52,10 @@ function exportFilename(
   kind: HalftoneExportKind,
   lpi: number,
   angle: number,
+  dotShape: HalftoneDotShape,
 ): string {
   const suffix = kind === 'underbase' ? 'white' : kind;
-  return `halftone_LPI${Math.round(lpi)}_ANG${Math.round(angle)}_${suffix}.png`;
+  return `halftone_${dotShape}_LPI${Math.round(lpi)}_ANG${Math.round(angle)}_${suffix}.png`;
 }
 
 function createCanvas(width: number, height: number): HTMLCanvasElement {
@@ -138,6 +144,18 @@ async function renderExport(
     throw new Error('La imagen es demasiado grande para el storage buffer de esta GPU.');
   }
 
+  const exportScale = Math.min(
+    width / image.logicalWidth,
+    height / image.logicalHeight,
+  );
+  const exportPitch = (options.dpi / Math.max(options.lpi, 1)) * exportScale;
+  if (exportPitch < 1) {
+    throw new Error(
+      `La trama necesita ${exportPitch.toFixed(2)} px por celda en esta exportación. ` +
+        'Sube los DPI, baja los LPI o usa una imagen de mayor resolución.',
+    );
+  }
+
   const format = navigator.gpu.getPreferredCanvasFormat();
   const shaderModule = device.createShaderModule({
     label: 'Halftone export fragment shader',
@@ -186,10 +204,16 @@ async function renderExport(
   const values = {
     imageWidth: width,
     imageHeight: height,
+    outputWidth: image.logicalWidth,
+    outputHeight: image.logicalHeight,
     pixels: image.pixels,
     lpi: options.lpi,
     angle: options.angle,
     contrast: options.contrast,
+    gamma: options.gamma,
+    minDot: options.minDot,
+    shadowPoint: options.shadowPoint,
+    dotShape: options.dotShape,
     dpi: options.dpi,
     underbase: options.underbase,
     choke: options.choke,
@@ -295,7 +319,7 @@ async function renderExport(
 
     return {
       blob,
-      filename: exportFilename(kind, options.lpi, options.angle),
+      filename: exportFilename(kind, options.lpi, options.angle, options.dotShape),
       width,
       height,
     };
@@ -310,6 +334,7 @@ export async function exportHalftonePng(
   source: HalftoneImageSource,
   options: HalftoneExportOptions,
   kind: HalftoneExportKind,
+  preferredSource?: ImageBitmap,
 ): Promise<HalftoneExportResult> {
   if (typeof navigator === 'undefined' || !navigator.gpu) {
     throw new Error('La exportación necesita un navegador compatible con WebGPU.');
@@ -332,7 +357,15 @@ export async function exportHalftonePng(
       ),
     );
 
-    const loaded = await loadImage(source);
+    // El bitmap ya decodificado por el preview evita volver a decodificar el
+    // archivo; si ya no es válido (cerrado), caemos a la fuente original.
+    const bitmapIsValid =
+      preferredSource !== undefined &&
+      preferredSource.width > 0 &&
+      preferredSource.height > 0;
+    const loaded = bitmapIsValid
+      ? await loadImage(preferredSource)
+      : await loadImage(source);
 
     try {
       const image = bitmapToPackedRgba(loaded.bitmap, maxDimension);
