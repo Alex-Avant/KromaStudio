@@ -8,8 +8,17 @@
     type HalftoneExportKind,
     type HalftoneImageSource,
     type HalftonePreviewMode,
+    type HalftonePreviewView,
+    type HalftonePolarity,
+    type HalftoneUnderbaseStyle,
   } from './lib';
   import { createDemoImage } from './lib/utils/demo-image';
+  import {
+    HALFTONE_DEFAULTS,
+    loadHalftoneSettings,
+    saveHalftoneSettings,
+    type HalftoneSettings,
+  } from './lib/utils/settings';
 
   const FILE_ACCEPT = '.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp';
   const SUPPORTED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
@@ -20,26 +29,28 @@
     { label: 'Gris', color: '#808080' },
   ] as const;
   const EXPORT_LABELS: Record<HalftoneExportKind, string> = {
-    color: 'capa de color',
-    underbase: 'capa blanca',
-    composite: 'composite',
+    color: 'separación de color',
+    underbase: 'base blanca',
+    composite: 'composite sobre camiseta',
   };
 
-  // Parámetros reactivos del motor.
-  let lpi = $state(45);
-  let angle = $state(45);
-  let contrast = $state(1);
-  let gamma = $state(1);
-  let minDot = $state(0.01);
-  let shadowPoint = $state(0.97);
-  let dotShape = $state<HalftoneDotShape>('circle');
-  let dpi = $state(300);
+  // Parámetros reactivos del motor, restaurados del último ajuste guardado.
+  const initialSettings = loadHalftoneSettings();
+  let lpi = $state(initialSettings.lpi);
+  let angle = $state(initialSettings.angle);
+  let contrast = $state(initialSettings.contrast);
+  let gamma = $state(initialSettings.gamma);
+  let minDot = $state(initialSettings.minDot);
+  let shadowPoint = $state(initialSettings.shadowPoint);
+  let dotShape = $state<HalftoneDotShape>(initialSettings.dotShape);
+  let dpi = $state(initialSettings.dpi);
   const cellPitch = $derived(dpi / Math.max(lpi, 1));
-  let underbase = $state(true);
-  let choke = $state(1);
-  let colorMode = $state<HalftoneColorMode>('mono');
-  let blackPoint = $state(0);
-  let whitePoint = $state(1);
+  let underbase = $state(initialSettings.underbase);
+  let choke = $state(initialSettings.choke);
+  let colorMode = $state<HalftoneColorMode>(initialSettings.colorMode);
+  let polarity = $state<HalftonePolarity>(initialSettings.polarity);
+  let blackPoint = $state(initialSettings.blackPoint);
+  let whitePoint = $state(initialSettings.whitePoint);
   const safeWhitePoint = $derived(
     Math.min(1, Math.max(0.1, whitePoint, blackPoint + 0.01)),
   );
@@ -50,11 +61,40 @@
     if (whitePoint < minWhite) whitePoint = minWhite;
   });
 
+  // Guarda los ajustes en este navegador con un pequeño debounce para no
+  // escribir en cada evento del slider.
+  $effect(() => {
+    const settings: HalftoneSettings = {
+      lpi,
+      angle,
+      contrast,
+      gamma,
+      minDot,
+      shadowPoint,
+      dotShape,
+      dpi,
+      underbase,
+      choke,
+      underbaseStyle,
+      colorMode,
+      polarity,
+      blackPoint,
+      whitePoint,
+      showUnderbase,
+      shirtColor,
+    };
+    const handle = setTimeout(() => saveHalftoneSettings(settings), 250);
+    return () => clearTimeout(handle);
+  });
+
   // Preview y exportación.
-  let shirtColor = $state('#111111');
-  let customShirtColor = $state('#111111');
-  let showUnderbase = $state(true);
+  let shirtColor = $state(initialSettings.shirtColor);
+  let customShirtColor = $state(initialSettings.shirtColor);
+  let showUnderbase = $state(initialSettings.showUnderbase);
+  let underbaseStyle = $state<HalftoneUnderbaseStyle>(initialSettings.underbaseStyle);
   let previewMode = $state<HalftonePreviewMode>('fit');
+  let previewView = $state<HalftonePreviewView>('result');
+  let exportReady = $state(false);
   let exporting = $state<HalftoneExportKind | null>(null);
   let exportMessage = $state<string | null>(null);
   let exportError = $state<string | null>(null);
@@ -105,6 +145,7 @@
     fileError = null;
     exportMessage = null;
     exportError = null;
+    exportReady = false;
     selectedName = 'Demo generada';
     source = demoBitmap;
   }
@@ -133,6 +174,7 @@
       return;
     }
 
+    exportReady = false;
     selectedName = file.name;
     source = file;
   }
@@ -176,6 +218,37 @@
     const input = event.currentTarget as HTMLInputElement;
     customShirtColor = input.value;
     setShirtColor(input.value);
+  }
+
+  function handlePercentInput(
+    event: Event,
+    apply: (value: number) => void,
+    max: number,
+    min = 0,
+  ) {
+    const input = event.currentTarget as HTMLInputElement;
+    const value = Number(input.value);
+    if (!Number.isFinite(value)) return;
+    apply(Math.min(max, Math.max(min, value / 100)));
+  }
+
+  function resetEngine() {
+    lpi = HALFTONE_DEFAULTS.lpi;
+    angle = HALFTONE_DEFAULTS.angle;
+    contrast = HALFTONE_DEFAULTS.contrast;
+    gamma = HALFTONE_DEFAULTS.gamma;
+    minDot = HALFTONE_DEFAULTS.minDot;
+    shadowPoint = HALFTONE_DEFAULTS.shadowPoint;
+    dotShape = HALFTONE_DEFAULTS.dotShape;
+    dpi = HALFTONE_DEFAULTS.dpi;
+    underbase = HALFTONE_DEFAULTS.underbase;
+    choke = HALFTONE_DEFAULTS.choke;
+    underbaseStyle = HALFTONE_DEFAULTS.underbaseStyle;
+    showUnderbase = HALFTONE_DEFAULTS.showUnderbase;
+    colorMode = HALFTONE_DEFAULTS.colorMode;
+    polarity = HALFTONE_DEFAULTS.polarity;
+    blackPoint = HALFTONE_DEFAULTS.blackPoint;
+    whitePoint = HALFTONE_DEFAULTS.whitePoint;
   }
 
   function downloadBlob(blob: Blob, filename: string) {
@@ -262,12 +335,16 @@
             {dpi}
             {underbase}
             {choke}
+            {underbaseStyle}
             {colorMode}
+            {polarity}
             {blackPoint}
             whitePoint={safeWhitePoint}
             {shirtColor}
             {showUnderbase}
             {previewMode}
+            {previewView}
+            bind:exportReady
           />
         {:else}
           <p class="loading">Generando imagen de prueba…</p>
@@ -277,33 +354,79 @@
           <div class="drop-overlay">Suelta la imagen aquí</div>
         {/if}
       </div>
-      <div class="preview-toolbar" role="group" aria-label="Escala de la vista previa">
-        <span>Escala</span>
-        <button
-          type="button"
-          class:active={previewMode === 'fit'}
-          aria-pressed={previewMode === 'fit'}
-          onclick={() => (previewMode = 'fit')}
-        >
-          Ajustar
-        </button>
-        <button
-          type="button"
-          class:active={previewMode === 'actual'}
-          aria-pressed={previewMode === 'actual'}
-          onclick={() => (previewMode = 'actual')}
-        >
-          100 %
-        </button>
+      <div class="preview-toolbar">
+        <div class="toolbar-group" role="group" aria-label="Vista de la imagen">
+          <span>Vista</span>
+          <button
+            type="button"
+            class:active={previewView === 'result'}
+            aria-pressed={previewView === 'result'}
+            onclick={() => (previewView = 'result')}
+          >
+            Resultado
+          </button>
+          <button
+            type="button"
+            class:active={previewView === 'original'}
+            aria-pressed={previewView === 'original'}
+            onclick={() => (previewView = 'original')}
+          >
+            Original
+          </button>
+          <button
+            type="button"
+            class:active={previewView === 'mask'}
+            aria-pressed={previewView === 'mask'}
+            onclick={() => (previewView = 'mask')}
+          >
+            Máscara
+          </button>
+          <button
+            type="button"
+            class:active={previewView === 'underbase'}
+            aria-pressed={previewView === 'underbase'}
+            onclick={() => (previewView = 'underbase')}
+          >
+            Blanco
+          </button>
+        </div>
+
+        <div class="toolbar-group scale-group" role="group" aria-label="Escala de la vista previa">
+          <span>Escala</span>
+          <button
+            type="button"
+            class:active={previewMode === 'fit'}
+            aria-pressed={previewMode === 'fit'}
+            onclick={() => (previewMode = 'fit')}
+          >
+            Ajustar
+          </button>
+          <button
+            type="button"
+            class:active={previewMode === 'actual'}
+            aria-pressed={previewMode === 'actual'}
+            onclick={() => (previewMode = 'actual')}
+          >
+            100 %
+          </button>
+        </div>
       </div>
       <p class="preview-note">
         El fondo simula la camiseta. El blanco es la capa de underbase; los
-        puntos negros, la capa de color. También puedes arrastrar una imagen
-        sobre la vista previa.
+        puntos negros, la capa de color. Usa las vistas para comparar el
+        original, la máscara de impresión y la base blanca; también puedes
+        arrastrar una imagen sobre la vista previa.
       </p>
     </div>
 
     <aside class="controls" aria-label="Parámetros de semitono y underbase">
+      <div class="controls-head">
+        <span>Ajustes</span>
+        <button type="button" class="reset-button" onclick={resetEngine}>
+          Restaurar
+        </button>
+      </div>
+
       <fieldset>
         <legend>Imagen</legend>
 
@@ -331,167 +454,339 @@
         </p>
       </fieldset>
 
-      <fieldset>
-        <legend>Trama</legend>
+      <details class="control-group" open>
+        <summary>Trama</summary>
+        <div class="group-body">
+          <label>
+            <span>Forma de punto</span>
+            <select bind:value={dotShape}>
+              <option value="circle">Círculo</option>
+              <option value="ellipse">Elipse</option>
+              <option value="diamond">Diamante</option>
+              <option value="square">Cuadrado</option>
+              <option value="line">Línea</option>
+            </select>
+          </label>
 
-        <label>
-          <span>Forma de punto</span>
-          <select bind:value={dotShape}>
-            <option value="circle">Círculo</option>
-            <option value="ellipse">Elipse</option>
-            <option value="diamond">Diamante</option>
-          </select>
-        </label>
+          <label>
+            <span>
+              LPI
+              <input
+                class="number-input"
+                type="number"
+                min="10"
+                max="120"
+                step="1"
+                bind:value={lpi}
+                aria-label="LPI exacto"
+              />
+            </span>
+            <input type="range" min="10" max="120" step="1" bind:value={lpi} />
+          </label>
 
-        <label>
-          <span>LPI <output>{lpi}</output></span>
-          <input type="range" min="10" max="120" step="1" bind:value={lpi} />
-        </label>
+          <div class="presets" role="group" aria-label="Presets de LPI">
+            {#each [35, 45, 55, 65] as value}
+              <button
+                type="button"
+                class:active={lpi === value}
+                onclick={() => (lpi = value)}
+              >
+                {value}
+              </button>
+            {/each}
+          </div>
 
-        <label>
-          <span>Ángulo <output>{angle}°</output></span>
-          <input type="range" min="0" max="180" step="1" bind:value={angle} />
-        </label>
+          <label>
+            <span>
+              Ángulo
+              <input
+                class="number-input"
+                type="number"
+                min="0"
+                max="180"
+                step="0.5"
+                bind:value={angle}
+                aria-label="Ángulo exacto en grados"
+              />
+            </span>
+            <input type="range" min="0" max="180" step="0.5" bind:value={angle} />
+          </label>
 
-        <label>
-          <span>Contraste <output>{contrast.toFixed(2)}</output></span>
-          <input type="range" min="0.5" max="2.5" step="0.05" bind:value={contrast} />
-        </label>
+          <div class="presets" role="group" aria-label="Presets de ángulo">
+            {#each [22.5, 45] as value}
+              <button
+                type="button"
+                class:active={angle === value}
+                onclick={() => (angle = value)}
+              >
+                {value}°
+              </button>
+            {/each}
+          </div>
 
-        <label>
-          <span>DPI de salida <output>{dpi}</output></span>
-          <input type="range" min="72" max="600" step="1" bind:value={dpi} />
-        </label>
+          <label>
+            <span>
+              Contraste
+              <input
+                class="number-input"
+                type="number"
+                min="0.5"
+                max="2.5"
+                step="0.05"
+                bind:value={contrast}
+                aria-label="Contraste exacto"
+              />
+            </span>
+            <input type="range" min="0.5" max="2.5" step="0.05" bind:value={contrast} />
+          </label>
 
-        <p class="hint">Pitch lógico: {cellPitch.toFixed(2)} px por celda.</p>
-        {#if cellPitch < 1}
-          <p class="file-error" role="alert">
-            Esta combinación no se puede exportar: necesita menos de un píxel por celda.
-            Sube los DPI o baja los LPI.
-          </p>
-        {:else if cellPitch < 2}
-          <p class="hint">
-            La trama tiene menos de dos píxeles por celda; el preview mostrará cobertura
-            media y la exportación puede perder definición.
-          </p>
-        {/if}
-      </fieldset>
+          <label>
+            <span>
+              DPI de salida
+              <input
+                class="number-input"
+                type="number"
+                min="72"
+                max="600"
+                step="1"
+                bind:value={dpi}
+                aria-label="DPI de salida exacto"
+              />
+            </span>
+            <input type="range" min="72" max="600" step="1" bind:value={dpi} />
+          </label>
 
-      <fieldset>
-        <legend>Color y niveles</legend>
-
-        <label>
-          <span>Modo de color</span>
-          <select bind:value={colorMode}>
-            <option value="color">Color Original</option>
-            <option value="mono">Blanco y Negro (Monocromo)</option>
-          </select>
-        </label>
-
-        <label>
-          <span>Compensación tonal <output>{gamma.toFixed(2)}</output></span>
-          <input type="range" min="0.4" max="2.5" step="0.05" bind:value={gamma} />
-        </label>
-
-        <label>
-          <span>Punto mínimo <output>{(minDot * 100).toFixed(1)} %</output></span>
-          <input type="range" min="0" max="0.2" step="0.005" bind:value={minDot} />
-        </label>
-
-        <label>
-          <span>Sombras sólidas <output>{(shadowPoint * 100).toFixed(0)} %</output></span>
-          <input type="range" min="0.8" max="1" step="0.01" bind:value={shadowPoint} />
-        </label>
-
-        <label>
-          <span>Nivel de Negro <output>{blackPoint.toFixed(2)}</output></span>
-          <input
-            type="range"
-            min="0"
-            max="0.9"
-            step="0.01"
-            bind:value={blackPoint}
-          />
-        </label>
-
-        <label>
-          <span>Nivel de Blanco <output>{safeWhitePoint.toFixed(2)}</output></span>
-          <input
-            type="range"
-            min={Math.max(0.1, blackPoint + 0.01).toFixed(2)}
-            max="1"
-            step="0.01"
-            bind:value={whitePoint}
-          />
-        </label>
-
-        <p class="hint">
-          La compensación tonal ajusta el área de los puntos; por encima de 1 reduce
-          los tonos medios. El punto mínimo descarta luces débiles y las sombras
-          sólidas definen el salto a cobertura completa. El nivel de negro recorta
-          el fondo oscuro.
-        </p>
-      </fieldset>
-
-      <fieldset>
-        <legend>Underbase</legend>
-
-        <label class="switch">
-          <input type="checkbox" bind:checked={underbase} />
-          <span>Underbase activo</span>
-        </label>
-
-        <label class="switch">
-          <input type="checkbox" bind:checked={showUnderbase} disabled={!underbase} />
-          <span>Mostrar underbase en preview</span>
-        </label>
-
-        <label>
-          <span>Choke <output>{choke.toFixed(1)} px</output></span>
-          <input
-            type="range"
-            min="0"
-            max="3"
-            step="0.5"
-            bind:value={choke}
-            disabled={!underbase}
-          />
-        </label>
-
-        <p class="hint">
-          El underbase solo se genera bajo tinta visible y se erosiona con el
-          choke para que el blanco no asome en los bordes del diseño.
-        </p>
-      </fieldset>
-
-      <fieldset>
-        <legend>Camiseta</legend>
-
-        <div class="shirt-presets" role="group" aria-label="Color de camiseta">
-          {#each SHIRT_PRESETS as preset}
-            <button
-              type="button"
-              class="shirt-swatch"
-              class:active={shirtColor === preset.color}
-              style={`--swatch: ${preset.color};`}
-              aria-pressed={shirtColor === preset.color}
-              onclick={() => setShirtColor(preset.color)}
-            >
-              <span class="swatch-dot"></span>
-              {preset.label}
-            </button>
-          {/each}
+          <p class="hint">Pitch lógico: {cellPitch.toFixed(2)} px por celda.</p>
+          {#if cellPitch < 1}
+            <p class="file-error" role="alert">
+              Esta combinación no se puede exportar: necesita menos de un píxel por celda.
+              Sube los DPI o baja los LPI.
+            </p>
+          {:else if cellPitch < 2}
+            <p class="hint">
+              La trama tiene menos de dos píxeles por celda; el preview mostrará cobertura
+              media y la exportación puede perder definición.
+            </p>
+          {/if}
         </div>
+      </details>
 
-        <label class="color-picker">
-          <span>Color personalizado</span>
-          <input
-            type="color"
-            value={customShirtColor}
-            oninput={handleCustomColor}
-          />
-        </label>
-      </fieldset>
+      <details class="control-group" open>
+        <summary>Color y niveles</summary>
+        <div class="group-body">
+          <label>
+            <span>Modo de color</span>
+            <select bind:value={colorMode}>
+              <option value="color">Color Original</option>
+              <option value="mono">Blanco y Negro (Monocromo)</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Polaridad tonal</span>
+            <select bind:value={polarity}>
+              <option value="light">Luces imprimen</option>
+              <option value="dark">Sombras imprimen</option>
+            </select>
+          </label>
+
+          <label>
+            <span>
+              Compensación tonal
+              <input
+                class="number-input"
+                type="number"
+                min="0.4"
+                max="2.5"
+                step="0.05"
+                bind:value={gamma}
+                aria-label="Compensación tonal exacta"
+              />
+            </span>
+            <input type="range" min="0.4" max="2.5" step="0.05" bind:value={gamma} />
+          </label>
+
+          <label>
+            <span>
+              Punto mínimo (%)
+              <input
+                class="number-input"
+                type="number"
+                min="0"
+                max="20"
+                step="0.5"
+                value={(minDot * 100).toFixed(1)}
+                oninput={(event) => handlePercentInput(event, (value) => (minDot = value), 0.2)}
+                aria-label="Punto mínimo en porcentaje"
+              />
+            </span>
+            <input type="range" min="0" max="0.2" step="0.005" bind:value={minDot} />
+          </label>
+
+          <label>
+            <span>
+              Sombras sólidas (%)
+              <input
+                class="number-input"
+                type="number"
+                min="80"
+                max="100"
+                step="1"
+                value={(shadowPoint * 100).toFixed(0)}
+                oninput={(event) =>
+                  handlePercentInput(event, (value) => (shadowPoint = value), 1, 0.8)}
+                aria-label="Sombras sólidas en porcentaje"
+              />
+            </span>
+            <input type="range" min="0.8" max="1" step="0.01" bind:value={shadowPoint} />
+          </label>
+
+          <label>
+            <span>
+              Nivel de Negro (%)
+              <input
+                class="number-input"
+                type="number"
+                min="0"
+                max="90"
+                step="1"
+                value={(blackPoint * 100).toFixed(0)}
+                oninput={(event) =>
+                  handlePercentInput(event, (value) => (blackPoint = value), 0.9)}
+                aria-label="Nivel de negro en porcentaje"
+              />
+            </span>
+            <input
+              type="range"
+              min="0"
+              max="0.9"
+              step="0.01"
+              bind:value={blackPoint}
+            />
+          </label>
+
+          <label>
+            <span>
+              Nivel de Blanco (%)
+              <input
+                class="number-input"
+                type="number"
+                min={Math.max(1, (blackPoint + 0.01) * 100).toFixed(0)}
+                max="100"
+                step="1"
+                value={(safeWhitePoint * 100).toFixed(0)}
+                oninput={(event) =>
+                  handlePercentInput(
+                    event,
+                    (value) => (whitePoint = value),
+                    1,
+                    Math.max(0.1, blackPoint + 0.01),
+                  )}
+                aria-label="Nivel de blanco en porcentaje"
+              />
+            </span>
+            <input
+              type="range"
+              min={Math.max(0.1, blackPoint + 0.01).toFixed(2)}
+              max="1"
+              step="0.01"
+              bind:value={whitePoint}
+            />
+          </label>
+
+          <p class="hint">
+            La compensación tonal ajusta el área de los puntos; por encima de 1 reduce
+            los tonos medios. El punto mínimo descarta luces débiles y las sombras
+            sólidas definen el salto a cobertura completa. El nivel de negro recorta
+            el fondo oscuro. La polaridad decide si la tinta corresponde a las luces
+            (referencia Photoshop) o a las sombras.
+          </p>
+        </div>
+      </details>
+
+      <details class="control-group" open>
+        <summary>Underbase</summary>
+        <div class="group-body">
+          <label class="switch">
+            <input type="checkbox" bind:checked={underbase} />
+            <span>Underbase activo</span>
+          </label>
+
+          <label>
+            <span>Tipo de base</span>
+            <select bind:value={underbaseStyle} disabled={!underbase}>
+              <option value="dot">Tramada (puntos)</option>
+              <option value="solid">Sólida</option>
+            </select>
+          </label>
+
+          <label class="switch">
+            <input type="checkbox" bind:checked={showUnderbase} disabled={!underbase} />
+            <span>Mostrar underbase en el resultado</span>
+          </label>
+
+          <label>
+            <span>
+              Choke (px)
+              <input
+                class="number-input"
+                type="number"
+                min="0"
+                max="3"
+                step="0.5"
+                bind:value={choke}
+                disabled={!underbase}
+                aria-label="Choke exacto en píxeles"
+              />
+            </span>
+            <input
+              type="range"
+              min="0"
+              max="3"
+              step="0.5"
+              bind:value={choke}
+              disabled={!underbase}
+            />
+          </label>
+
+          <p class="hint">
+            El underbase solo se genera bajo tinta visible y se erosiona con el
+            choke para que el blanco no asome en los bordes del diseño. La base
+            tramada replica los puntos de color; la sólida cubre toda el área
+            imprimible. Valida cuál acepta mejor tu RIP.
+          </p>
+        </div>
+      </details>
+
+      <details class="control-group" open>
+        <summary>Camiseta</summary>
+        <div class="group-body">
+          <div class="shirt-presets" role="group" aria-label="Color de camiseta">
+            {#each SHIRT_PRESETS as preset}
+              <button
+                type="button"
+                class="shirt-swatch"
+                class:active={shirtColor === preset.color}
+                style={`--swatch: ${preset.color};`}
+                aria-pressed={shirtColor === preset.color}
+                onclick={() => setShirtColor(preset.color)}
+              >
+                <span class="swatch-dot"></span>
+                {preset.label}
+              </button>
+            {/each}
+          </div>
+
+          <label class="color-picker">
+            <span>Color personalizado</span>
+            <input
+              type="color"
+              value={customShirtColor}
+              oninput={handleCustomColor}
+            />
+          </label>
+        </div>
+      </details>
 
       <fieldset>
         <legend>Exportar PNG</legend>
@@ -500,25 +795,25 @@
           <button
             type="button"
             onclick={() => downloadPng('color')}
-            disabled={!source || exporting !== null || cellPitch < 1}
+            disabled={!source || !exportReady || exporting !== null || cellPitch < 1}
           >
-            {exporting === 'color' ? 'Procesando…' : 'Descargar color'}
+            {exporting === 'color' ? 'Procesando…' : 'Color (separación)'}
           </button>
           <button
             type="button"
             class="secondary"
             onclick={() => downloadPng('underbase')}
-            disabled={!source || !underbase || exporting !== null || cellPitch < 1}
+            disabled={!source || !exportReady || !underbase || exporting !== null || cellPitch < 1}
           >
-            {exporting === 'underbase' ? 'Procesando…' : 'Descargar blanco'}
+            {exporting === 'underbase' ? 'Procesando…' : 'Base blanca'}
           </button>
           <button
             type="button"
             class="secondary"
             onclick={() => downloadPng('composite')}
-            disabled={!source || exporting !== null || cellPitch < 1}
+            disabled={!source || !exportReady || exporting !== null || cellPitch < 1}
           >
-            {exporting === 'composite' ? 'Procesando…' : 'Descargar composite'}
+            {exporting === 'composite' ? 'Procesando…' : 'Composite'}
           </button>
         </div>
 
@@ -538,9 +833,11 @@
         {/if}
 
         <p class="hint">
-          La exportación se renderiza a la resolución de la imagen (hasta el
-          límite de la GPU) con el DPI seleccionado. Los PNG de color y blanco
-          salen con fondo transparente.
+          <strong>Color</strong> es la separación de tinta: no incluye blanco ni
+          choke. <strong>Base blanca</strong> aplica el tipo de base y el choke
+          configurados. <strong>Composite</strong> combina ambos sobre el color
+          de camiseta. Los PNG salen con transparencia y a la resolución de la
+          imagen.
         </p>
       </fieldset>
 
@@ -646,15 +943,28 @@
 
   .preview-toolbar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 0.45rem;
+    gap: 0.5rem 0.75rem;
     margin-top: 0.75rem;
     font: 0.78rem/1.3 ui-monospace, monospace;
     color: #7f7a73;
   }
 
+  .toolbar-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+  }
+
+  .toolbar-group.scale-group {
+    margin-left: auto;
+  }
+
   .preview-toolbar span {
-    margin-right: auto;
+    color: inherit;
   }
 
   .preview-toolbar button {
@@ -664,6 +974,7 @@
     background: #14161b;
     color: #a8a29a;
     font: inherit;
+    white-space: nowrap;
     cursor: pointer;
   }
 
@@ -673,6 +984,32 @@
   }
 
   .preview-toolbar button:focus-visible {
+    outline: 2px solid #f0b45f;
+    outline-offset: 2px;
+  }
+
+  .presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .presets button {
+    padding: 0.25rem 0.6rem;
+    border: 1px solid #2a2c33;
+    border-radius: 6px;
+    background: #14161b;
+    color: #a8a29a;
+    font: 0.72rem/1.3 ui-monospace, monospace;
+    cursor: pointer;
+  }
+
+  .presets button.active {
+    border-color: #f0b45f;
+    color: #f0b45f;
+  }
+
+  .presets button:focus-visible {
     outline: 2px solid #f0b45f;
     outline-offset: 2px;
   }
@@ -691,6 +1028,87 @@
     border: 1px solid #2a2c33;
     border-radius: 18px;
     background: linear-gradient(180deg, #14161b, #101216);
+  }
+
+  .controls-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    font: 600 0.78rem/1.2 ui-monospace, monospace;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #f0b45f;
+  }
+
+  .reset-button {
+    padding: 0.3rem 0.55rem;
+    border: 1px solid #2a2c33;
+    border-radius: 7px;
+    background: transparent;
+    color: #a8a29a;
+    font: 0.72rem/1.2 ui-monospace, monospace;
+    letter-spacing: 0;
+    text-transform: none;
+    cursor: pointer;
+  }
+
+  .reset-button:hover {
+    border-color: #f0b45f;
+    color: #f0b45f;
+  }
+
+  .reset-button:focus-visible {
+    outline: 2px solid #f0b45f;
+    outline-offset: 2px;
+  }
+
+  .control-group {
+    padding: 0 0 0.85rem;
+    border-bottom: 1px solid #24262d;
+  }
+
+  .control-group > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0;
+    font: 600 0.78rem/1.2 ui-monospace, monospace;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #f0b45f;
+    list-style: none;
+    cursor: pointer;
+  }
+
+  .control-group > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .control-group > summary::after {
+    content: '▾';
+    font-size: 0.9rem;
+    transition: transform 0.15s ease;
+  }
+
+  .control-group:not([open]) > summary::after {
+    transform: rotate(-90deg);
+  }
+
+  .control-group[open] > summary {
+    margin-bottom: 0.85rem;
+  }
+
+  .control-group > summary:focus-visible {
+    outline: 2px solid #f0b45f;
+    outline-offset: 2px;
+  }
+
+  .group-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
   }
 
   fieldset {
@@ -731,9 +1149,24 @@
     gap: 1rem;
   }
 
-  output {
-    font-family: ui-monospace, monospace;
+  .number-input {
+    width: 4.75rem;
+    padding: 0.25rem 0.4rem;
+    border: 1px solid #2a2c33;
+    border-radius: 6px;
+    background: #0f1115;
     color: #f5f0e8;
+    font: 0.78rem/1.2 ui-monospace, monospace;
+    text-align: right;
+  }
+
+  .number-input:focus-visible {
+    outline: 2px solid #f0b45f;
+    outline-offset: 2px;
+  }
+
+  .number-input:disabled {
+    opacity: 0.4;
   }
 
   input[type='range'] {
@@ -948,6 +1381,20 @@
   @media (max-width: 880px) {
     .workspace {
       grid-template-columns: 1fr;
+    }
+
+    .toolbar-group.scale-group {
+      margin-left: 0;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .toolbar-group {
+      width: 100%;
+    }
+
+    .toolbar-group button {
+      flex: 1 1 auto;
     }
   }
 </style>

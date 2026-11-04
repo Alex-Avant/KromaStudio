@@ -8,7 +8,10 @@ export type {
   HalftoneExportResult,
   HalftoneImageSource,
   HalftoneOptions,
+  HalftonePolarity,
   HalftonePreviewCanvases,
   HalftonePreviewMode,
+  HalftonePreviewView,
+  HalftoneUnderbaseStyle,
   UnderbaseOptions,
 } from './types/halftone';

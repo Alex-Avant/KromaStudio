@@ -5,10 +5,22 @@ export type HalftoneImageSource = ImageBitmap | Blob | string;
 export type HalftoneColorMode = 'color' | 'mono';
 
 /** Geometría disponible para los puntos de la trama. */
-export type HalftoneDotShape = 'circle' | 'ellipse' | 'diamond';
+export type HalftoneDotShape = 'circle' | 'ellipse' | 'diamond' | 'square' | 'line';
 
 /** Escala de la vista previa: ajustada al panel o un píxel lógico por píxel CSS. */
 export type HalftonePreviewMode = 'fit' | 'actual';
+
+/** Vista de comparación del preview: resultado, original, máscara o base blanca. */
+export type HalftonePreviewView = 'result' | 'original' | 'underbase' | 'mask';
+
+/** Estilo de la base blanca: tramada con la misma geometría de puntos o sólida. */
+export type HalftoneUnderbaseStyle = 'dot' | 'solid';
+
+/**
+ * Extremo tonal que produce la tinta. `light` imprime las zonas claras (flujo
+ * de referencia de Photoshop); `dark` imprime las zonas oscuras.
+ */
+export type HalftonePolarity = 'light' | 'dark';
 
 /** Parámetros del motor de semitono. */
 export interface HalftoneOptions {
@@ -30,6 +42,8 @@ export interface HalftoneOptions {
   dpi: number;
   /** Color original de la imagen o monocromo negro. */
   colorMode: HalftoneColorMode;
+  /** Extremo tonal que produce tinta. */
+  polarity: HalftonePolarity;
   /** Luminancia por debajo de la cual el píxel se vuelve transparente. */
   blackPoint: number;
   /** Luminancia que se remapea a blanco para aumentar el contraste. */
@@ -42,6 +56,8 @@ export interface UnderbaseOptions {
   enabled: boolean;
   /** Erosión de la máscara de tinta, en píxeles de salida (0 a 3). */
   choke: number;
+  /** Base tramada (misma geometría de puntos) o sólida bajo el diseño. */
+  style: HalftoneUnderbaseStyle;
 }
 
 /** Props públicas de HalftoneCanvas.svelte. */
@@ -58,11 +74,16 @@ export interface HalftoneCanvasProps {
   underbase?: boolean;
   choke?: number;
   colorMode?: HalftoneColorMode;
+  polarity?: HalftonePolarity;
   blackPoint?: number;
   whitePoint?: number;
   shirtColor?: string;
   showUnderbase?: boolean;
+  underbaseStyle?: HalftoneUnderbaseStyle;
   previewMode?: HalftonePreviewMode;
+  previewView?: HalftonePreviewView;
+  /** Indica si la imagen actual ya está lista para exportar. */
+  exportReady?: boolean;
   width?: string;
   height?: string;
 }

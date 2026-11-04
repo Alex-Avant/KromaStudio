@@ -1,7 +1,14 @@
-import type { HalftoneColorMode, HalftoneDotShape, SvaderParameter } from '../types/halftone';
+import type {
+  HalftoneColorMode,
+  HalftoneDotShape,
+  HalftonePolarity,
+  HalftoneUnderbaseStyle,
+  SvaderParameter,
+} from '../types/halftone';
 
 export const COLOR_MODE = 0;
 export const UNDERBASE_MODE = 1;
+export const MASK_MODE = 2;
 
 export interface HalftoneParameterValues {
   imageWidth: number;
@@ -19,7 +26,9 @@ export interface HalftoneParameterValues {
   dpi: number;
   underbase: boolean;
   choke: number;
+  underbaseStyle: HalftoneUnderbaseStyle;
   colorMode: HalftoneColorMode;
+  polarity: HalftonePolarity;
   blackPoint: number;
   whitePoint: number;
 }
@@ -53,7 +62,20 @@ export function buildHalftoneParameters(
   const safeOutputWidth = Math.max(1, input.outputWidth);
   const safeOutputHeight = Math.max(1, input.outputHeight);
   const colorMode = input.colorMode === 'color' ? 0 : 1;
-  const dotShape = input.dotShape === 'ellipse' ? 1 : input.dotShape === 'diamond' ? 2 : 0;
+  // Binding 12.w empaqueta flags: bit 0 = base sólida, bit 1 = polaridad
+  // oscura. Así no se añade un decimotercer uniform buffer.
+  const levelsFlags =
+    (input.underbaseStyle === 'solid' ? 1 : 0) + (input.polarity === 'dark' ? 2 : 0);
+  const dotShape =
+    input.dotShape === 'ellipse'
+      ? 1
+      : input.dotShape === 'diamond'
+        ? 2
+        : input.dotShape === 'square'
+          ? 3
+          : input.dotShape === 'line'
+            ? 4
+            : 0;
 
   return [
     { label: 'Resolución', binding: 0, value: 'resolution' },
@@ -94,9 +116,9 @@ export function buildHalftoneParameters(
       value: new Uint32Array([colorMode]),
     },
     {
-      label: 'Niveles y forma de punto',
+      label: 'Niveles, forma de punto, base y polaridad',
       binding: 12,
-      value: new Float32Array([safeBlack, safeWhite, dotShape, 0]),
+      value: new Float32Array([safeBlack, safeWhite, dotShape, levelsFlags]),
     },
   ];
 }

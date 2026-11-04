@@ -5,10 +5,13 @@ import type {
   HalftoneExportKind,
   HalftoneExportResult,
   HalftoneImageSource,
+  HalftonePolarity,
+  HalftoneUnderbaseStyle,
   SvaderParameter,
 } from '../types/halftone';
 import { bitmapToPackedRgba, loadImage } from './image';
 import { buildHalftoneParameters, COLOR_MODE, UNDERBASE_MODE } from './parameters';
+import { addPngDpi } from './png';
 
 export interface HalftoneExportOptions {
   lpi: number;
@@ -21,7 +24,9 @@ export interface HalftoneExportOptions {
   dpi: number;
   underbase: boolean;
   choke: number;
+  underbaseStyle: HalftoneUnderbaseStyle;
   colorMode: HalftoneColorMode;
+  polarity: HalftonePolarity;
   blackPoint: number;
   whitePoint: number;
   shirtColor: string;
@@ -48,14 +53,20 @@ const VERTEX_SHADER = `
   }
 `;
 
-function exportFilename(
-  kind: HalftoneExportKind,
-  lpi: number,
-  angle: number,
-  dotShape: HalftoneDotShape,
-): string {
+function formatValue(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function exportFilename(kind: HalftoneExportKind, options: HalftoneExportOptions): string {
   const suffix = kind === 'underbase' ? 'white' : kind;
-  return `halftone_${dotShape}_LPI${Math.round(lpi)}_ANG${Math.round(angle)}_${suffix}.png`;
+  const base = options.underbaseStyle === 'solid' ? 'solid' : 'dot';
+  return (
+    `kroma_${options.dotShape}_LPI${Math.round(options.lpi)}` +
+    `_ANG${formatValue(options.angle)}_${Math.round(options.dpi)}DPI` +
+    `_CHK${formatValue(options.choke)}_G${formatValue(options.gamma)}` +
+    `_${base}_${options.polarity === 'dark' ? 'dark' : 'light'}_${suffix}.png`
+  );
 }
 
 function createCanvas(width: number, height: number): HTMLCanvasElement {
@@ -217,7 +228,9 @@ async function renderExport(
     dpi: options.dpi,
     underbase: options.underbase,
     choke: options.choke,
+    underbaseStyle: options.underbaseStyle,
     colorMode: options.colorMode,
+    polarity: options.polarity,
     blackPoint: options.blackPoint,
     whitePoint: options.whitePoint,
   };
@@ -317,9 +330,12 @@ async function renderExport(
       blob = await canvasToBlob(selectedCanvas);
     }
 
+    // Conserva el tamaño físico en el PNG (pHYs) para que el RIP lo lea bien.
+    blob = await addPngDpi(blob, options.dpi);
+
     return {
       blob,
-      filename: exportFilename(kind, options.lpi, options.angle, options.dotShape),
+      filename: exportFilename(kind, options),
       width,
       height,
     };

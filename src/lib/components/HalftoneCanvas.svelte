@@ -4,7 +4,7 @@
   import shaderCode from '../shaders/halftone.wgsl?raw';
   import { bitmapToPackedRgba, loadImage } from '../utils/image';
   import { exportHalftonePng } from '../utils/export';
-  import { buildHalftoneParameters, COLOR_MODE, UNDERBASE_MODE } from '../utils/parameters';
+  import { buildHalftoneParameters, COLOR_MODE, MASK_MODE, UNDERBASE_MODE } from '../utils/parameters';
   import type {
     HalftoneCanvasProps,
     HalftoneExportKind,
@@ -26,11 +26,15 @@
     underbase = true,
     choke = 1,
     colorMode = 'mono',
+    polarity = 'light',
     blackPoint = 0,
     whitePoint = 1,
     shirtColor = '#111111',
     showUnderbase = true,
+    underbaseStyle = 'dot',
     previewMode = 'fit',
+    previewView = 'result',
+    exportReady = $bindable(false),
     width = '100%',
     height = '100%',
   }: HalftoneCanvasProps = $props();
@@ -59,6 +63,7 @@
   $effect(() => {
     let cancelled = false;
     loading = true;
+    exportReady = false;
     error = null;
 
     (async () => {
@@ -83,10 +88,17 @@
         imageHeight = prepared.height;
         logicalWidth = prepared.logicalWidth;
         logicalHeight = prepared.logicalHeight;
+        exportReady = true;
       } catch (cause) {
         if (!cancelled) {
           pixels = null;
           error = cause instanceof Error ? cause.message : 'Error desconocido al cargar la imagen.';
+
+          // Sin bitmap retenido no se puede exportar una imagen anterior.
+          if (activeOwned && activeBitmap) activeBitmap.close();
+          activeBitmap = null;
+          activeOwned = false;
+          exportReady = false;
         }
       } finally {
         // Sólo liberamos los bitmaps creados por nosotros que no quedaron
@@ -124,18 +136,23 @@
       dpi,
       underbase,
       choke,
+      underbaseStyle,
       colorMode,
+      polarity,
       blackPoint,
       whitePoint,
     };
   });
 
-  // Dos pasadas con el mismo WGSL: color arriba y underbase debajo.
+  // Pasadas con el mismo WGSL: color, underbase y máscara de impresión.
   const colorParameters = $derived.by(() =>
     parameterValues ? buildHalftoneParameters(parameterValues, COLOR_MODE) : [],
   );
   const underbaseParameters = $derived.by(() =>
     parameterValues ? buildHalftoneParameters(parameterValues, UNDERBASE_MODE) : [],
+  );
+  const maskParameters = $derived.by(() =>
+    parameterValues ? buildHalftoneParameters(parameterValues, MASK_MODE) : [],
   );
 
   const aspectRatio = $derived(
@@ -149,6 +166,20 @@
 
   // Referencia al contenedor para exponer los canvas del preview al padre.
   let root: HTMLDivElement | null = $state(null);
+  let originalCanvas: HTMLCanvasElement | null = $state(null);
+
+  // La vista «original» dibuja el bitmap fuente sin trama para comparar.
+  $effect(() => {
+    if (previewView !== 'original' || !activeBitmap || !originalCanvas) return;
+
+    const maxSide = 4096;
+    const scale = Math.min(1, maxSide / Math.max(activeBitmap.width, activeBitmap.height));
+    originalCanvas.width = Math.max(1, Math.round(activeBitmap.width * scale));
+    originalCanvas.height = Math.max(1, Math.round(activeBitmap.height * scale));
+    originalCanvas
+      .getContext('2d')
+      ?.drawImage(activeBitmap, 0, 0, originalCanvas.width, originalCanvas.height);
+  });
 
   export function getPreviewCanvases(): HalftonePreviewCanvases {
     return {
@@ -158,6 +189,12 @@
   }
 
   export function exportPng(kind: HalftoneExportKind): Promise<HalftoneExportResult> {
+    if (!exportReady || !activeBitmap) {
+      return Promise.reject(
+        new Error('La imagen todavía se está preparando. Espera a que la vista previa termine.'),
+      );
+    }
+
     return exportHalftonePng(
       src,
       {
@@ -171,7 +208,9 @@
         dpi,
         underbase,
         choke,
+        underbaseStyle,
         colorMode,
+        polarity,
         blackPoint,
         whitePoint,
         shirtColor,
@@ -199,12 +238,12 @@
     {#key pixels}
       <!--
         Capa inferior: underbase blanco erosionado (choke). Se mantiene montada
-        para que getPreviewCanvases() siempre pueda devolver ambos canvas; el
-        checkbox de preview sólo la oculta visualmente.
+        para que getPreviewCanvases() siempre pueda devolver ambos canvas; los
+        selectores de vista sólo la ocultan visualmente.
       -->
       <div
         class="layer underbase-layer"
-        class:hidden={!underbase || !showUnderbase}
+        class:hidden={!underbase || !showUnderbase || (previewView !== 'result' && previewView !== 'underbase')}
         aria-hidden="true"
       >
         <WebGpuShader
@@ -218,7 +257,10 @@
       </div>
 
       <!-- Capa superior: puntos negros con alfa transparente entre ellos. -->
-      <div class="layer color-layer">
+      <div
+        class="layer color-layer"
+        class:hidden={previewView === 'underbase' || previewView === 'mask' || previewView === 'original'}
+      >
         <WebGpuShader
           {width}
           {height}
@@ -234,6 +276,24 @@
           </div>
         </WebGpuShader>
       </div>
+
+      {#if previewView === 'mask'}
+        <!-- Máscara de impresión: la cobertura de tinta en gris premultiplicado. -->
+        <div class="layer mask-layer">
+          <WebGpuShader
+            {width}
+            {height}
+            code={shaderCode}
+            parameters={maskParameters}
+          >
+            <div class="fallback"></div>
+          </WebGpuShader>
+        </div>
+      {/if}
+
+      {#if previewView === 'original'}
+        <canvas bind:this={originalCanvas} class="layer original-layer"></canvas>
+      {/if}
     {/key}
   {/if}
 </div>
@@ -256,12 +316,23 @@
     z-index: 0;
   }
 
-  .underbase-layer.hidden {
+  .color-layer {
+    z-index: 1;
+  }
+
+  .mask-layer {
+    z-index: 1;
+  }
+
+  .layer.hidden {
     visibility: hidden;
   }
 
-  .color-layer {
+  .original-layer {
     z-index: 1;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
   }
 
   .status,
