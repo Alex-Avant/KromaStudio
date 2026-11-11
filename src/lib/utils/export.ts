@@ -58,15 +58,37 @@ function formatValue(value: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
-function exportFilename(kind: HalftoneExportKind, options: HalftoneExportOptions): string {
+function formatPercent(value: number, digits = 0): string {
+  const scaled = Math.max(0, value) * 100;
+  return digits > 0 ? scaled.toFixed(digits) : String(Math.round(scaled));
+}
+
+export function exportFilename(kind: HalftoneExportKind, options: HalftoneExportOptions): string {
   const suffix = kind === 'underbase' ? 'white' : kind;
-  const base = options.underbaseStyle === 'solid' ? 'solid' : 'dot';
-  return (
-    `kroma_${options.dotShape}_LPI${Math.round(options.lpi)}` +
-    `_ANG${formatValue(options.angle)}_${Math.round(options.dpi)}DPI` +
-    `_CHK${formatValue(options.choke)}_G${formatValue(options.gamma)}` +
-    `_${base}_${options.polarity === 'dark' ? 'dark' : 'light'}_${suffix}.png`
-  );
+  const parts = [
+    'kroma',
+    options.dotShape,
+    `LPI${Math.round(options.lpi)}`,
+    `ANG${formatValue(options.angle)}`,
+    `${Math.round(options.dpi)}DPI`,
+    `C${formatValue(options.contrast)}`,
+    `G${formatValue(options.gamma)}`,
+    `MD${formatPercent(options.minDot, 1)}`,
+    `SH${formatPercent(options.shadowPoint)}`,
+    `BP${formatPercent(options.blackPoint)}`,
+    `WP${formatPercent(options.whitePoint)}`,
+  ];
+
+  // El choke y el tipo de base solo afectan a blanco y composite.
+  if (kind !== 'color' && options.underbase) {
+    parts.push(
+      `CHK${formatValue(options.choke)}`,
+      options.underbaseStyle === 'solid' ? 'solid' : 'dot',
+    );
+  }
+
+  parts.push(options.polarity === 'dark' ? 'dark' : 'light', suffix);
+  return `${parts.join('_')}.png`;
 }
 
 function createCanvas(width: number, height: number): HTMLCanvasElement {

@@ -215,7 +215,10 @@ fn source_ink_at(
     if (source.a < 0.5) {
         return 0.0;
     }
-    return select(0.0, 1.0, coverage_from_source(source) > 0.0);
+    // La base sólida no debe cubrir zonas cuyo punto ya desapareció por el
+    // umbral mínimo de impresión.
+    let coverage = coverage_from_source(source);
+    return select(0.0, 1.0, coverage > 0.0 && coverage >= u_tone.z);
 }
 
 const CHOKE_OFFSETS: array<vec2<f32>, 8> = array<vec2<f32>, 8>(

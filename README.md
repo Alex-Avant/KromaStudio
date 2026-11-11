@@ -39,7 +39,7 @@ El buffer de preview se limita a 2048 px por lado, pero la rejilla usa las dimen
 
 La escala **Ajustar** adapta la imagen al panel; **100 %** muestra un píxel lógico por píxel CSS y permite desplazarse por la imagen.
 
-Se pueden descargar PNG transparentes de color y underbase, además de un composite sobre el color de camiseta seleccionado. **Color** es la separación de tinta (sin blanco ni choke); **Base blanca** aplica el estilo de base y el choke; **Composite** combina ambos. Las descargas se habilitan cuando la imagen actual terminó de cargarse. El DPI controla la geometría de la trama y se guarda como metadatos físicos (pHYs) en el PNG.
+Se pueden descargar PNG transparentes de color y underbase, además de un composite sobre el color de camiseta seleccionado. **Color** es la separación de tinta (sin blanco ni choke); **Base blanca** aplica el estilo de base y el choke; **Composite** combina ambos. Las descargas se habilitan cuando la imagen actual terminó de cargarse. El nombre del archivo incluye polaridad y ajustes tonales; choke y estilo de base solo aparecen cuando afectan a la capa exportada. El DPI controla la geometría de la trama y se guarda como metadatos físicos (pHYs) en el PNG.
 
 La demo incorpora rampas tonal y de alfa, parches de cobertura, color, texto y transparencia para comparar cambios del motor.
 

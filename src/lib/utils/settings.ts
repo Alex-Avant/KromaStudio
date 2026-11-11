@@ -76,12 +76,14 @@ export function loadHalftoneSettings(): HalftoneSettings {
 
     const data = JSON.parse(raw) as Partial<HalftoneSettings>;
     return {
-      lpi: numberIn(data.lpi, HALFTONE_DEFAULTS.lpi, 1, 300),
-      angle: numberIn(data.angle, HALFTONE_DEFAULTS.angle, 0, 360),
-      contrast: numberIn(data.contrast, HALFTONE_DEFAULTS.contrast, 0.1, 5),
-      gamma: numberIn(data.gamma, HALFTONE_DEFAULTS.gamma, 0.1, 5),
-      minDot: numberIn(data.minDot, HALFTONE_DEFAULTS.minDot, 0, 0.49),
-      shadowPoint: numberIn(data.shadowPoint, HALFTONE_DEFAULTS.shadowPoint, 0.5, 1),
+      // Los límites coinciden con los controles visibles para que un valor
+      // restaurado nunca quede fuera del rango que muestra la interfaz.
+      lpi: numberIn(data.lpi, HALFTONE_DEFAULTS.lpi, 10, 120),
+      angle: numberIn(data.angle, HALFTONE_DEFAULTS.angle, 0, 180),
+      contrast: numberIn(data.contrast, HALFTONE_DEFAULTS.contrast, 0.5, 2.5),
+      gamma: numberIn(data.gamma, HALFTONE_DEFAULTS.gamma, 0.4, 2.5),
+      minDot: numberIn(data.minDot, HALFTONE_DEFAULTS.minDot, 0, 0.2),
+      shadowPoint: numberIn(data.shadowPoint, HALFTONE_DEFAULTS.shadowPoint, 0.8, 1),
       dotShape: oneOf(data.dotShape, HALFTONE_DEFAULTS.dotShape, [
         'circle',
         'ellipse',
@@ -89,9 +91,9 @@ export function loadHalftoneSettings(): HalftoneSettings {
         'square',
         'line',
       ]),
-      dpi: numberIn(data.dpi, HALFTONE_DEFAULTS.dpi, 1, 2400),
+      dpi: numberIn(data.dpi, HALFTONE_DEFAULTS.dpi, 72, 600),
       underbase: booleanOr(data.underbase, HALFTONE_DEFAULTS.underbase),
-      choke: numberIn(data.choke, HALFTONE_DEFAULTS.choke, 0, 10),
+      choke: numberIn(data.choke, HALFTONE_DEFAULTS.choke, 0, 3),
       underbaseStyle: oneOf(data.underbaseStyle, HALFTONE_DEFAULTS.underbaseStyle, [
         'dot',
         'solid',

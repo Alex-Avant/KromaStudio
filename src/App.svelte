@@ -33,6 +33,13 @@
     underbase: 'base blanca',
     composite: 'composite sobre camiseta',
   };
+  const DOT_SHAPE_LABELS: Record<HalftoneDotShape, string> = {
+    circle: 'Círculo',
+    ellipse: 'Elipse',
+    diamond: 'Diamante',
+    square: 'Cuadrado',
+    line: 'Línea',
+  };
 
   // Parámetros reactivos del motor, restaurados del último ajuste guardado.
   const initialSettings = loadHalftoneSettings();
@@ -99,6 +106,18 @@
   let exportMessage = $state<string | null>(null);
   let exportError = $state<string | null>(null);
   let canvasRef = $state<HalftoneCanvasHandle | null>(null);
+
+  const exportSummary = $derived(
+    `Ajustes: ${colorMode === 'color' ? 'Color Original' : 'Monocromo'} · ${
+      polarity === 'light' ? 'Luces imprimen' : 'Sombras imprimen'
+    } · ${lpi} LPI · ${angle}° · ${DOT_SHAPE_LABELS[dotShape]} · ${dpi} DPI. ` +
+      (underbase
+        ? `Blanco/Composite: base ${
+            underbaseStyle === 'solid' ? 'sólida' : 'tramada'
+          } y choke ${choke} px.`
+        : 'Underbase desactivado: solo hay capa Color.') +
+      ' La capa Color nunca incluye base ni choke.',
+  );
 
   // La fuente puede ser la demo generada o un archivo local.
   let source = $state<HalftoneImageSource | null>(null);
@@ -230,6 +249,20 @@
     const value = Number(input.value);
     if (!Number.isFinite(value)) return;
     apply(Math.min(max, Math.max(min, value / 100)));
+  }
+
+  // Al salir del campo numérico, deja el valor dentro del mismo rango que el
+  // slider para que preview, exportación y ajustes guardados coincidan.
+  function clampNumberInput(
+    event: Event,
+    apply: (value: number) => void,
+    min: number,
+    max: number,
+    fallback: number,
+  ) {
+    const input = event.currentTarget as HTMLInputElement;
+    const value = Number(input.value);
+    apply(Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback);
   }
 
   function resetEngine() {
@@ -478,6 +511,8 @@
                 max="120"
                 step="1"
                 bind:value={lpi}
+                onchange={(event) =>
+                  clampNumberInput(event, (value) => (lpi = value), 10, 120, HALFTONE_DEFAULTS.lpi)}
                 aria-label="LPI exacto"
               />
             </span>
@@ -506,6 +541,8 @@
                 max="180"
                 step="0.5"
                 bind:value={angle}
+                onchange={(event) =>
+                  clampNumberInput(event, (value) => (angle = value), 0, 180, HALFTONE_DEFAULTS.angle)}
                 aria-label="Ángulo exacto en grados"
               />
             </span>
@@ -534,6 +571,8 @@
                 max="2.5"
                 step="0.05"
                 bind:value={contrast}
+                onchange={(event) =>
+                  clampNumberInput(event, (value) => (contrast = value), 0.5, 2.5, HALFTONE_DEFAULTS.contrast)}
                 aria-label="Contraste exacto"
               />
             </span>
@@ -550,6 +589,8 @@
                 max="600"
                 step="1"
                 bind:value={dpi}
+                onchange={(event) =>
+                  clampNumberInput(event, (value) => (dpi = value), 72, 600, HALFTONE_DEFAULTS.dpi)}
                 aria-label="DPI de salida exacto"
               />
             </span>
@@ -600,6 +641,8 @@
                 max="2.5"
                 step="0.05"
                 bind:value={gamma}
+                onchange={(event) =>
+                  clampNumberInput(event, (value) => (gamma = value), 0.4, 2.5, HALFTONE_DEFAULTS.gamma)}
                 aria-label="Compensación tonal exacta"
               />
             </span>
@@ -735,6 +778,8 @@
                 max="3"
                 step="0.5"
                 bind:value={choke}
+                onchange={(event) =>
+                  clampNumberInput(event, (value) => (choke = value), 0, 3, HALFTONE_DEFAULTS.choke)}
                 disabled={!underbase}
                 aria-label="Choke exacto en píxeles"
               />
@@ -790,6 +835,8 @@
 
       <fieldset>
         <legend>Exportar PNG</legend>
+
+        <p class="export-summary">{exportSummary}</p>
 
         <div class="export-actions">
           <button
@@ -1322,6 +1369,16 @@
     margin: 0;
     font: 0.8rem/1.4 system-ui, sans-serif;
     color: #f0b45f;
+  }
+
+  .export-summary {
+    margin: 0;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid #24262d;
+    border-radius: 8px;
+    background: #0f1115;
+    font: 0.74rem/1.5 ui-monospace, monospace;
+    color: #b8b2a8;
   }
 
   .spinner {
