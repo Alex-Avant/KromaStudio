@@ -43,6 +43,12 @@ Se pueden descargar PNG transparentes de color y underbase, además de un compos
 
 La demo incorpora rampas tonal y de alfa, parches de cobertura, color, texto y transparencia para comparar cambios del motor.
 
+## Calibración DTF
+
+El botón **Hoja de calibración** genera una lámina con degradados, parches de cobertura, círculos, líneas finas, tipografía, color sólido y transparencia usando los ajustes actuales. Reúne en un solo PNG las separaciones Color, Base blanca (si está activa) y Composite; las etiquetas se dibujan después del semitono para que no se tramaden. El PNG conserva el DPI mediante pHYs.
+
+Sirve para validar físicamente la pérdida de puntos en luces, el cierre de sombras, la legibilidad y la correspondencia entre blanco y color después de aplicar polvo, curar, prensar y lavar.
+
 ## Alcance de producción
 
 KromaStudio genera una trama artística en el PNG; no sustituye el screening, los perfiles ICC ni la calibración del RIP. El punto mínimo imprimible y la ganancia de punto deben validarse con la impresora, tinta, película, polvo, curado y prenda reales. Evita aplicar una segunda compensación si el RIP ya la realiza.

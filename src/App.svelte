@@ -13,6 +13,8 @@
     type HalftoneUnderbaseStyle,
   } from './lib';
   import { createDemoImage } from './lib/utils/demo-image';
+  import { exportCalibrationSheet } from './lib/utils/calibration-export';
+  import type { HalftoneExportOptions } from './lib/utils/export';
   import {
     HALFTONE_DEFAULTS,
     loadHalftoneSettings,
@@ -103,6 +105,7 @@
   let previewView = $state<HalftonePreviewView>('result');
   let exportReady = $state(false);
   let exporting = $state<HalftoneExportKind | null>(null);
+  let calibrating = $state(false);
   let exportMessage = $state<string | null>(null);
   let exportError = $state<string | null>(null);
   let canvasRef = $state<HalftoneCanvasHandle | null>(null);
@@ -316,6 +319,48 @@
           : 'No se pudo generar la exportación.';
     } finally {
       exporting = null;
+    }
+  }
+
+  function currentExportOptions(): HalftoneExportOptions {
+    return {
+      lpi,
+      angle,
+      contrast,
+      gamma,
+      minDot,
+      shadowPoint,
+      dotShape,
+      dpi,
+      underbase,
+      choke,
+      underbaseStyle,
+      colorMode,
+      polarity,
+      blackPoint,
+      whitePoint: safeWhitePoint,
+      shirtColor,
+    };
+  }
+
+  async function downloadCalibration() {
+    if (calibrating) return;
+
+    calibrating = true;
+    exportMessage = null;
+    exportError = null;
+
+    try {
+      const result = await exportCalibrationSheet(currentExportOptions());
+      downloadBlob(result.blob, result.filename);
+      exportMessage = `Hoja de calibración: ${result.filename} · ${result.width} × ${result.height} px`;
+    } catch (cause) {
+      exportError =
+        cause instanceof Error
+          ? `No se pudo generar la calibración: ${cause.message}`
+          : 'No se pudo generar la hoja de calibración.';
+    } finally {
+      calibrating = false;
     }
   }
 </script>
@@ -862,7 +907,22 @@
           >
             {exporting === 'composite' ? 'Procesando…' : 'Composite'}
           </button>
+          <button
+            type="button"
+            class="secondary"
+            onclick={downloadCalibration}
+            disabled={calibrating || exporting !== null || cellPitch < 1}
+          >
+            {calibrating ? 'Generando hoja…' : 'Hoja de calibración'}
+          </button>
         </div>
+
+        {#if calibrating}
+          <p class="export-status" role="status">
+            <span class="spinner" aria-hidden="true"></span>
+            Generando hoja de calibración…
+          </p>
+        {/if}
 
         {#if exporting}
           <p class="export-status" role="status">
@@ -885,6 +945,10 @@
           configurados. <strong>Composite</strong> combina ambos sobre el color
           de camiseta. Los PNG salen con transparencia y a la resolución de la
           imagen.
+        </p>
+        <p class="hint">
+          La hoja de calibración reúne Color, Base blanca y Composite con los
+          ajustes actuales; sus etiquetas se añaden después del semitono.
         </p>
       </fieldset>
 
