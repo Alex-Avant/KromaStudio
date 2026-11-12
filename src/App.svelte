@@ -453,6 +453,14 @@
           </button>
           <button
             type="button"
+            class:active={previewView === 'compare'}
+            aria-pressed={previewView === 'compare'}
+            onclick={() => (previewView = 'compare')}
+          >
+            Comparar
+          </button>
+          <button
+            type="button"
             class:active={previewView === 'mask'}
             aria-pressed={previewView === 'mask'}
             onclick={() => (previewView = 'mask')}
@@ -491,9 +499,10 @@
       </div>
       <p class="preview-note">
         El fondo simula la camiseta. El blanco es la capa de underbase; los
-        puntos negros, la capa de color. Usa las vistas para comparar el
-        original, la máscara de impresión y la base blanca; también puedes
-        arrastrar una imagen sobre la vista previa.
+        puntos negros, la capa de color. Usa <strong>Comparar</strong> para
+        superponer el original y el resultado con un divisor arrastrable, o
+        cambia a las vistas de máscara y base blanca. También puedes arrastrar
+        una imagen sobre la vista previa.
       </p>
     </div>
 

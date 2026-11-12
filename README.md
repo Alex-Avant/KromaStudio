@@ -37,7 +37,9 @@ Cuando la trama no se puede resolver en el preview, el shader muestra su cobertu
 
 El buffer de preview se limita a 2048 px por lado, pero la rejilla usa las dimensiones lógicas originales de la imagen. Preview y exportación conservan así el mismo número y fase de celdas aunque utilicen buffers de muestreo diferentes.
 
-La escala **Ajustar** adapta la imagen al panel; **100 %** muestra un píxel lógico por píxel CSS y permite desplazarse por la imagen.
+La escala **Ajustar** adapta la imagen al panel; **100 %** muestra un píxel lógico por píxel CSS y permite paneo arrastrando dentro de la vista.
+
+La vista **Comparar** superpone el original y el resultado con un divisor arrastrable; ambos lados comparten la misma resolución de preview y posición. También puede moverse el divisor con las flechas del teclado.
 
 Se pueden descargar PNG transparentes de color y underbase, además de un composite sobre el color de camiseta seleccionado. **Color** es la separación de tinta (sin blanco ni choke); **Base blanca** aplica el estilo de base y el choke; **Composite** combina ambos. Las descargas se habilitan cuando la imagen actual terminó de cargarse. El nombre del archivo incluye polaridad y ajustes tonales; choke y estilo de base solo aparecen cuando afectan a la capa exportada. El DPI controla la geometría de la trama y se guarda como metadatos físicos (pHYs) en el PNG.
 
@@ -55,4 +57,4 @@ KromaStudio genera una trama artística en el PNG; no sustituye el screening, lo
 
 ## Verificación
 
-`npm run check` y `npm run build` no compilan el WGSL importado como texto. Después de cambiar el shader, valida también `getCompilationInfo()` y la creación del pipeline en un navegador con WebGPU. Las pruebas visuales y de exportación deben hacerse en un navegador WebGPU real; el submit/toBlob de Chromium headless con SwiftShader en Termux tiene limitaciones conocidas.
+`npm run check`, `npm run build` y `npm test`. Las pruebas de Vitest cubren configuración persistida, empaquetado de polaridad/base, nombres de exportación y metadatos pHYs. No compilan WGSL: después de cambiar el shader, valida también `getCompilationInfo()` y la creación del pipeline en un navegador con WebGPU. Las pruebas visuales y de exportación deben hacerse en un navegador WebGPU real; el submit/toBlob de Chromium headless con SwiftShader en Termux tiene limitaciones conocidas.

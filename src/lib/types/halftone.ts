@@ -10,8 +10,8 @@ export type HalftoneDotShape = 'circle' | 'ellipse' | 'diamond' | 'square' | 'li
 /** Escala de la vista previa: ajustada al panel o un píxel lógico por píxel CSS. */
 export type HalftonePreviewMode = 'fit' | 'actual';
 
-/** Vista de comparación del preview: resultado, original, máscara o base blanca. */
-export type HalftonePreviewView = 'result' | 'original' | 'underbase' | 'mask';
+/** Vista de comparación del preview: resultado, original, máscara, base blanca o wipe. */
+export type HalftonePreviewView = 'result' | 'original' | 'underbase' | 'mask' | 'compare';
 
 /** Estilo de la base blanca: tramada con la misma geometría de puntos o sólida. */
 export type HalftoneUnderbaseStyle = 'dot' | 'solid';

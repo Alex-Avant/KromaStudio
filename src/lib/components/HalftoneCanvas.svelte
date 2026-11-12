@@ -167,19 +167,112 @@
   // Referencia al contenedor para exponer los canvas del preview al padre.
   let root: HTMLDivElement | null = $state(null);
   let originalCanvas: HTMLCanvasElement | null = $state(null);
+  let comparePosition = $state(50);
+  let splitting = $state(false);
+  let panning = $state(false);
+  let panScroller: HTMLElement | null = null;
+  let panStart = { x: 0, y: 0, left: 0, top: 0 };
 
-  // La vista «original» dibuja el bitmap fuente sin trama para comparar.
+  // La vista «original» y la comparación dibujan el bitmap fuente con las
+  // mismas dimensiones que el buffer del preview, para que la diferencia
+  // visible sea la trama y no un reescalado distinto.
   $effect(() => {
-    if (previewView !== 'original' || !activeBitmap || !originalCanvas) return;
+    if (
+      (previewView !== 'original' && previewView !== 'compare') ||
+      !activeBitmap ||
+      !originalCanvas
+    ) {
+      return;
+    }
 
-    const maxSide = 4096;
-    const scale = Math.min(1, maxSide / Math.max(activeBitmap.width, activeBitmap.height));
-    originalCanvas.width = Math.max(1, Math.round(activeBitmap.width * scale));
-    originalCanvas.height = Math.max(1, Math.round(activeBitmap.height * scale));
+    originalCanvas.width = Math.max(1, imageWidth);
+    originalCanvas.height = Math.max(1, imageHeight);
     originalCanvas
       .getContext('2d')
       ?.drawImage(activeBitmap, 0, 0, originalCanvas.width, originalCanvas.height);
   });
+
+  function updateComparePosition(clientX: number) {
+    if (!root) return;
+    const rect = root.getBoundingClientRect();
+    comparePosition = Math.min(98, Math.max(2, ((clientX - rect.left) / rect.width) * 100));
+  }
+
+  function startSplit(event: PointerEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    splitting = true;
+    try {
+      (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+    } catch {
+      // Punteros sintéticos o navegadores sin captura: seguimos con el drag.
+    }
+    updateComparePosition(event.clientX);
+  }
+
+  function moveSplit(event: PointerEvent) {
+    if (!splitting) return;
+    updateComparePosition(event.clientX);
+  }
+
+  function endSplit(event: PointerEvent) {
+    splitting = false;
+    try {
+      (event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId);
+    } catch {
+      // La captura pudo no haberse concedido.
+    }
+  }
+
+  function handleSplitKey(event: KeyboardEvent) {
+    const step = event.shiftKey ? 5 : 1;
+    if (event.key === 'ArrowLeft') {
+      comparePosition = Math.max(2, comparePosition - step);
+      event.preventDefault();
+    } else if (event.key === 'ArrowRight') {
+      comparePosition = Math.min(98, comparePosition + step);
+      event.preventDefault();
+    }
+  }
+
+  function startPan(event: PointerEvent) {
+    if (previewMode !== 'actual' || !root) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+
+    const scroller = root.closest('.checkerboard');
+    if (!(scroller instanceof HTMLElement)) return;
+
+    panning = true;
+    panScroller = scroller;
+    panStart = {
+      x: event.clientX,
+      y: event.clientY,
+      left: scroller.scrollLeft,
+      top: scroller.scrollTop,
+    };
+    try {
+      (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+    } catch {
+      // La captura no es indispensable para mover el scroll.
+    }
+  }
+
+  function movePan(event: PointerEvent) {
+    if (!panning || !panScroller) return;
+    panScroller.scrollLeft = panStart.left - (event.clientX - panStart.x);
+    panScroller.scrollTop = panStart.top - (event.clientY - panStart.y);
+  }
+
+  function endPan(event: PointerEvent) {
+    if (!panning) return;
+    panning = false;
+    panScroller = null;
+    try {
+      (event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId);
+    } catch {
+      // La captura pudo no haberse concedido.
+    }
+  }
 
   export function getPreviewCanvases(): HalftonePreviewCanvases {
     return {
@@ -221,7 +314,19 @@
   }
 </script>
 
-<div bind:this={root} class="halftone-canvas" style={viewportStyle}>
+<div
+  bind:this={root}
+  class="halftone-canvas"
+  class:actual-pan={previewMode === 'actual'}
+  class:panning
+  role="group"
+  aria-label="Vista previa del semitono con paneo"
+  style={`${viewportStyle} --compare-split: ${comparePosition}%;`}
+  onpointerdown={startPan}
+  onpointermove={movePan}
+  onpointerup={endPan}
+  onpointercancel={endPan}
+>
   {#if error}
     <div class="status error" role="alert">
       <strong>No se pudo preparar la imagen.</strong>
@@ -243,7 +348,8 @@
       -->
       <div
         class="layer underbase-layer"
-        class:hidden={!underbase || !showUnderbase || (previewView !== 'result' && previewView !== 'underbase')}
+        class:hidden={!underbase || !showUnderbase || (previewView !== 'result' && previewView !== 'underbase' && previewView !== 'compare')}
+        class:compare-clipped={previewView === 'compare'}
         aria-hidden="true"
       >
         <WebGpuShader
@@ -260,6 +366,7 @@
       <div
         class="layer color-layer"
         class:hidden={previewView === 'underbase' || previewView === 'mask' || previewView === 'original'}
+        class:compare-clipped={previewView === 'compare'}
       >
         <WebGpuShader
           {width}
@@ -291,8 +398,36 @@
         </div>
       {/if}
 
-      {#if previewView === 'original'}
-        <canvas bind:this={originalCanvas} class="layer original-layer"></canvas>
+      {#if previewView === 'original' || previewView === 'compare'}
+        <canvas
+          bind:this={originalCanvas}
+          class="layer original-layer"
+          class:compare-original={previewView === 'compare'}
+        ></canvas>
+      {/if}
+
+      {#if previewView === 'compare'}
+        <div class="compare-divider" style={`left: ${comparePosition}%;`}>
+          <div
+            class="compare-handle"
+            role="slider"
+            tabindex="0"
+            aria-label="Mover divisor de comparación"
+            aria-orientation="horizontal"
+            aria-valuemin="2"
+            aria-valuemax="98"
+            aria-valuenow={Math.round(comparePosition)}
+            onpointerdown={startSplit}
+            onpointermove={moveSplit}
+            onpointerup={endSplit}
+            onpointercancel={endSplit}
+            onkeydown={handleSplitKey}
+          >
+            <span aria-hidden="true"></span>
+          </div>
+        </div>
+        <span class="compare-chip original-chip">Original</span>
+        <span class="compare-chip result-chip">Resultado</span>
       {/if}
     {/key}
   {/if}
@@ -329,10 +464,90 @@
   }
 
   .original-layer {
-    z-index: 1;
+    z-index: 0;
     width: 100%;
     height: 100%;
     object-fit: contain;
+  }
+
+  .layer.compare-clipped {
+    clip-path: inset(0 0 0 var(--compare-split));
+  }
+
+  .original-layer.compare-original {
+    clip-path: inset(0 calc(100% - var(--compare-split)) 0 0);
+  }
+
+  .compare-divider {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 4;
+    width: 2px;
+    margin-left: -1px;
+    background: #f0b45f;
+    pointer-events: none;
+  }
+
+  .compare-handle {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0;
+    border: 2px solid #f0b45f;
+    border-radius: 50%;
+    background: rgba(16, 18, 22, 0.92);
+    color: #f0b45f;
+    cursor: ew-resize;
+    pointer-events: auto;
+    touch-action: none;
+    transform: translate(-50%, -50%);
+  }
+
+  .compare-handle span {
+    width: 0.9rem;
+    height: 0.9rem;
+    border-right: 2px solid currentColor;
+    border-left: 2px solid currentColor;
+  }
+
+  .compare-handle:focus-visible {
+    outline: 2px solid #f5f0e8;
+    outline-offset: 3px;
+  }
+
+  .compare-chip {
+    position: absolute;
+    top: 0.6rem;
+    z-index: 5;
+    padding: 0.25rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(10, 11, 14, 0.72);
+    color: #f5f0e8;
+    font: 0.7rem/1.2 ui-monospace, monospace;
+    letter-spacing: 0.04em;
+    pointer-events: none;
+  }
+
+  .original-chip {
+    left: 0.6rem;
+  }
+
+  .result-chip {
+    right: 0.6rem;
+  }
+
+  .halftone-canvas.actual-pan {
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .halftone-canvas.actual-pan.panning {
+    cursor: grabbing;
   }
 
   .status,
