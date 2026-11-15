@@ -24,6 +24,7 @@ export interface CalibrationGeometry {
   holeBlock: CalibrationRect;
   labelBands: {
     ramp: CalibrationRect;
+    toneTitle: CalibrationRect;
     coverage: CalibrationRect;
     geometry: CalibrationRect;
     typography: CalibrationRect;
@@ -94,6 +95,7 @@ export function getCalibrationGeometry(width = BASE_WIDTH): CalibrationGeometry 
     holeBlock: scaleRect(rect(margin, 1540, 110, 50), scale),
     labelBands: {
       ramp: scaleRect(rect(margin, 210, contentWidth, 55), scale),
+      toneTitle: scaleRect(rect(margin, 272, contentWidth, 24), scale),
       coverage: scaleRect(rect(margin, 410, contentWidth, 55), scale),
       geometry: scaleRect(rect(margin, 470, contentWidth, 55), scale),
       typography: scaleRect(rect(margin, 940, contentWidth, 55), scale),

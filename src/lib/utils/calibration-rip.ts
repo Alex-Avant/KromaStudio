@@ -45,7 +45,7 @@ export async function exportCalibrationForRip(
 ): Promise<HalftoneExportResult> {
   const startedAt = performance.now();
   const { width, height } = ripCalibrationSize(options.dpi);
-  const { bitmap, labels } = await createCalibrationImage(width, height);
+  const { bitmap, labels } = await createCalibrationImage(width, height, options.polarity);
 
   try {
     const rendered = await exportHalftonePng(bitmap, options, 'color', bitmap);

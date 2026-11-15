@@ -47,7 +47,7 @@ La demo incorpora rampas tonal y de alfa, parches de cobertura, color, texto y t
 
 ## Calibración DTF
 
-El botón **Hoja de calibración** genera una lámina con degradados, parches de cobertura, círculos, líneas finas, tipografía, color sólido y transparencia usando los ajustes actuales. Reúne en un solo PNG las separaciones Color, Base blanca (si está activa) y Composite; las etiquetas se dibujan después del semitono para que no se tramaden. El PNG conserva el DPI mediante pHYs. La hoja reutiliza una sola sesión WebGPU para todos los paneles y muestra el tiempo de generación al terminar.
+El botón **Hoja de calibración** genera una lámina con degradado, escala de **tono de entrada (0–100 %)**, círculos, líneas finas, tipografía, color sólido y transparencia usando los ajustes actuales. Los patrones y la transparencia respetan la polaridad Luces/Sombras. Reúne en un solo PNG las separaciones Color, Base blanca (si está activa) y Composite; las etiquetas se dibujan después del semitono para que no se tramaden. El PNG conserva el DPI mediante pHYs. La hoja reutiliza una sola sesión WebGPU para todos los paneles y muestra el tiempo de generación al terminar.
 
 Sirve para validar físicamente la pérdida de puntos en luces, el cierre de sombras, la legibilidad y la correspondencia entre blanco y color después de aplicar polvo, curar, prensar y lavar.
 
@@ -59,4 +59,6 @@ KromaStudio genera una trama artística en el PNG; no sustituye el screening, lo
 
 ## Verificación
 
-`npm run check`, `npm run build` y `npm test`. Las pruebas de Vitest cubren configuración persistida, empaquetado de polaridad/base, nombres de exportación y metadatos pHYs. No compilan WGSL: después de cambiar el shader, valida también `getCompilationInfo()` y la creación del pipeline en un navegador con WebGPU. Las pruebas visuales y de exportación deben hacerse en un navegador WebGPU real; el submit/toBlob de Chromium headless con SwiftShader en Termux tiene limitaciones conocidas.
+`npm run check`, `npm run build` y `npm test`. Las pruebas de Vitest cubren geometría del screen, configuración persistida, empaquetado de polaridad/base, nombres de exportación, calibración y metadatos pHYs. No compilan WGSL ni leen píxeles de la GPU.
+
+Para una comprobación real del render/export, abre **`/qa.html`** con `npm run dev` en un navegador con WebGPU. La página exporta fixtures sintéticos y verifica dimensiones, 300 DPI, monotonía y precisión de cobertura, polaridad, transparencia, alfa y coherencia entre color y underbase. Permite descargar un informe JSON. El submit/toBlob de Chromium headless con SwiftShader en Termux tiene limitaciones conocidas, así que esa página debe ejecutarse en un navegador WebGPU real.

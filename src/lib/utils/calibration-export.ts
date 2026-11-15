@@ -104,13 +104,19 @@ export async function composeCalibrationSheet(
               : anchorX;
         const top = baseline - label.size * 0.82;
 
-        ctx.fillStyle = 'rgba(10, 11, 14, 0.82)';
-        ctx.fillRect(
-          left - 8,
-          top - 5,
-          textWidth + 16,
-          label.size * 1.12 + 10,
-        );
+        if (!label.plain) {
+          ctx.fillStyle = 'rgba(10, 11, 14, 0.82)';
+          ctx.fillRect(
+            left - 8,
+            top - 5,
+            textWidth + 16,
+            label.size * 1.12 + 10,
+          );
+        }
+
+        ctx.lineWidth = Math.max(2, Math.round(label.size * 0.12));
+        ctx.strokeStyle = 'rgba(10, 11, 14, 0.9)';
+        ctx.strokeText(label.text, anchorX, baseline);
         ctx.fillStyle = '#f5f0e8';
         ctx.fillText(label.text, anchorX, baseline);
       }
@@ -150,7 +156,7 @@ export async function exportCalibrationSheet(
   options: HalftoneExportOptions,
 ): Promise<HalftoneExportResult> {
   const startedAt = performance.now();
-  const { bitmap, labels } = await createCalibrationImage();
+  const { bitmap, labels } = await createCalibrationImage(1200, 1600, options.polarity);
   try {
     const kinds: Array<{ kind: HalftoneExportKind; title: string }> = [
       { kind: 'color', title: 'Color (separación)' },

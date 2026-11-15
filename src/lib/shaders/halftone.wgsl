@@ -100,6 +100,19 @@ fn grid_position(canvas_pos: vec2<f32>, cell: f32) -> vec2<f32> {
     return rotate2d(centered, u_angle) / cell;
 }
 
+// Área del disco recortada por la celda cuadrada [-0.5, 0.5]². Al pasar de
+// r = 0.5 el círculo sobresale de la celda; usar el área recortada evita que
+// las sombras queden más claras que el tono solicitado.
+fn circle_cell_area(radius: f32) -> f32 {
+    let r = clamp(radius, 0.0, 0.70710678);
+    if (r <= 0.5) {
+        return PI * r * r;
+    }
+
+    let cap = r * r * acos(0.5 / r) - 0.5 * sqrt(max(r * r - 0.25, 0.0));
+    return clamp(PI * r * r - 4.0 * cap, 0.0, 1.0);
+}
+
 // Umbral periódico del screen AM, expresado como fracción de área (0..1).
 // Comparar la cobertura del píxel contra este umbral equivale a dibujar el
 // punto cuya área coincide con la tonalidad local. Es el spot function de un
@@ -132,8 +145,8 @@ fn screen_threshold(cell_local: vec2<f32>) -> f32 {
         return 2.0 * abs(cell_local.y);
     }
 
-    // Círculo: área = π · r².
-    return PI * dot(cell_local, cell_local);
+    // Círculo: área recortada por la celda.
+    return circle_cell_area(length(cell_local));
 }
 
 // Cobertura tonal de la fuente en este píxel, ya con niveles, contraste,
