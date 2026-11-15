@@ -91,6 +91,29 @@ export function exportFilename(kind: HalftoneExportKind, options: HalftoneExport
   return `${parts.join('_')}.png`;
 }
 
+export type HalftoneExportResults = Partial<Record<HalftoneExportKind, HalftoneExportResult>>;
+
+interface ExportPasses {
+  color: boolean;
+  underbase: boolean;
+}
+
+/**
+ * Decide qué pasadas GPU hacen falta. Una exportación Color no debe preparar
+ * el underbase, y un composite sin base solo necesita la pasada de color.
+ */
+export function requiredPasses(
+  kinds: readonly HalftoneExportKind[],
+  options: Pick<HalftoneExportOptions, 'underbase'>,
+): ExportPasses {
+  const requested = new Set(kinds);
+  const composite = requested.has('composite');
+  return {
+    color: requested.has('color') || composite,
+    underbase: requested.has('underbase') || (composite && options.underbase),
+  };
+}
+
 function createCanvas(width: number, height: number): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -163,8 +186,8 @@ async function renderExport(
   device: GPUDevice,
   image: ReturnType<typeof bitmapToPackedRgba>,
   options: HalftoneExportOptions,
-  kind: HalftoneExportKind,
-): Promise<HalftoneExportResult> {
+  kinds: readonly HalftoneExportKind[],
+): Promise<HalftoneExportResults> {
   const width = image.width;
   const height = image.height;
 
@@ -266,36 +289,39 @@ async function renderExport(
   device.queue.writeBuffer(storageBuffer, 0, image.pixels);
   buffers.push(storageBuffer);
 
-  const colorBindGroup = createBindGroup(
-    device,
-    pipeline.getBindGroupLayout(0),
-    buildHalftoneParameters(values, COLOR_MODE),
-    width,
-    height,
-    buffers,
-    storageBuffer,
-  );
-  const underbaseBindGroup = createBindGroup(
-    device,
-    pipeline.getBindGroupLayout(0),
-    buildHalftoneParameters(values, UNDERBASE_MODE),
-    width,
-    height,
-    buffers,
-    storageBuffer,
-  );
+  const passes = requiredPasses(kinds, options);
 
-  const needsColor = kind === 'color' || kind === 'composite';
-  const needsUnderbase = kind === 'underbase' || kind === 'composite';
+  const colorBindGroup = passes.color
+    ? createBindGroup(
+        device,
+        pipeline.getBindGroupLayout(0),
+        buildHalftoneParameters(values, COLOR_MODE),
+        width,
+        height,
+        buffers,
+        storageBuffer,
+      )
+    : null;
+  const underbaseBindGroup = passes.underbase
+    ? createBindGroup(
+        device,
+        pipeline.getBindGroupLayout(0),
+        buildHalftoneParameters(values, UNDERBASE_MODE),
+        width,
+        height,
+        buffers,
+        storageBuffer,
+      )
+    : null;
 
-  const colorCanvas = needsColor ? createCanvas(width, height) : null;
-  const underbaseCanvas = needsUnderbase ? createCanvas(width, height) : null;
+  const colorCanvas = passes.color ? createCanvas(width, height) : null;
+  const underbaseCanvas = passes.underbase ? createCanvas(width, height) : null;
   const colorContext = (colorCanvas?.getContext('webgpu') ??
     null) as GPUCanvasContext | null;
   const underbaseContext = (underbaseCanvas?.getContext('webgpu') ??
     null) as GPUCanvasContext | null;
 
-  if ((needsColor && !colorContext) || (needsUnderbase && !underbaseContext)) {
+  if ((passes.color && !colorContext) || (passes.underbase && !underbaseContext)) {
     buffers.forEach((buffer) => buffer.destroy());
     throw new Error('No se pudo crear el contexto WebGPU de exportación.');
   }
@@ -325,42 +351,46 @@ async function renderExport(
       device.queue.submit([encoder.finish()]);
     };
 
-    if (colorContext) draw(colorContext, colorBindGroup);
-    if (underbaseContext) draw(underbaseContext, underbaseBindGroup);
+    if (colorContext && colorBindGroup) draw(colorContext, colorBindGroup);
+    if (underbaseContext && underbaseBindGroup) draw(underbaseContext, underbaseBindGroup);
 
     await device.queue.onSubmittedWorkDone();
 
-    let blob: Blob;
+    const results: HalftoneExportResults = {};
+    for (const requested of new Set(kinds)) {
+      let blob: Blob;
 
-    if (kind === 'composite') {
-      const compositeCanvas = createCanvas(width, height);
-      const context = compositeCanvas.getContext('2d');
-      if (!context) throw new Error('No se pudo crear el canvas de composición.');
+      if (requested === 'composite') {
+        const compositeCanvas = createCanvas(width, height);
+        const context = compositeCanvas.getContext('2d');
+        if (!context) throw new Error('No se pudo crear el canvas de composición.');
 
-      context.fillStyle = options.shirtColor;
-      context.fillRect(0, 0, width, height);
-      if (options.underbase && underbaseCanvas) {
-        context.drawImage(underbaseCanvas, 0, 0);
+        context.fillStyle = options.shirtColor;
+        context.fillRect(0, 0, width, height);
+        if (options.underbase && underbaseCanvas) {
+          context.drawImage(underbaseCanvas, 0, 0);
+        }
+        if (colorCanvas) context.drawImage(colorCanvas, 0, 0);
+        blob = await canvasToBlob(compositeCanvas);
+      } else {
+        const selectedCanvas = requested === 'color' ? colorCanvas : underbaseCanvas;
+        if (!selectedCanvas) {
+          throw new Error('No se pudo preparar el canvas de exportación.');
+        }
+        blob = await canvasToBlob(selectedCanvas);
       }
-      if (colorCanvas) context.drawImage(colorCanvas, 0, 0);
-      blob = await canvasToBlob(compositeCanvas);
-    } else {
-      const selectedCanvas = kind === 'color' ? colorCanvas : underbaseCanvas;
-      if (!selectedCanvas) {
-        throw new Error('No se pudo preparar el canvas de exportación.');
-      }
-      blob = await canvasToBlob(selectedCanvas);
+
+      // Conserva el tamaño físico en el PNG (pHYs) para que el RIP lo lea bien.
+      blob = await addPngDpi(blob, options.dpi);
+      results[requested] = {
+        blob,
+        filename: exportFilename(requested, options),
+        width,
+        height,
+      };
     }
 
-    // Conserva el tamaño físico en el PNG (pHYs) para que el RIP lo lea bien.
-    blob = await addPngDpi(blob, options.dpi);
-
-    return {
-      blob,
-      filename: exportFilename(kind, options),
-      width,
-      height,
-    };
+    return results;
   } finally {
     colorContext?.unconfigure();
     underbaseContext?.unconfigure();
@@ -368,16 +398,25 @@ async function renderExport(
   }
 }
 
-export async function exportHalftonePng(
+/**
+ * Exporta una o varias capas con un único dispositivo, pipeline y empaquetado
+ * de la imagen. La hoja de calibración usa esta entrada para no repetir todo el
+ * trabajo de GPU tres veces.
+ */
+export async function exportHalftoneLayers(
   source: HalftoneImageSource,
   options: HalftoneExportOptions,
-  kind: HalftoneExportKind,
+  kinds: readonly HalftoneExportKind[],
   preferredSource?: ImageBitmap,
-): Promise<HalftoneExportResult> {
+): Promise<HalftoneExportResults> {
+  if (kinds.length === 0) {
+    throw new Error('No hay capas para exportar.');
+  }
   if (typeof navigator === 'undefined' || !navigator.gpu) {
     throw new Error('La exportación necesita un navegador compatible con WebGPU.');
   }
 
+  const startedAt = performance.now();
   const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
   if (!adapter) throw new Error('No se pudo obtener un adaptador WebGPU.');
 
@@ -407,11 +446,30 @@ export async function exportHalftonePng(
 
     try {
       const image = bitmapToPackedRgba(loaded.bitmap, maxDimension);
-      return await renderExport(device, image, options, kind);
+      const results = await renderExport(device, image, options, kinds);
+      const durationMs = performance.now() - startedAt;
+      for (const result of Object.values(results)) {
+        if (result) result.durationMs = durationMs;
+      }
+      return results;
     } finally {
       if (loaded.owned) loaded.bitmap.close();
     }
   } finally {
     device.destroy();
   }
+}
+
+export async function exportHalftonePng(
+  source: HalftoneImageSource,
+  options: HalftoneExportOptions,
+  kind: HalftoneExportKind,
+  preferredSource?: ImageBitmap,
+): Promise<HalftoneExportResult> {
+  const results = await exportHalftoneLayers(source, options, [kind], preferredSource);
+  const result = results[kind];
+  if (!result) {
+    throw new Error('No se pudo generar la capa solicitada.');
+  }
+  return result;
 }

@@ -14,6 +14,7 @@
   } from './lib';
   import { createDemoImage } from './lib/utils/demo-image';
   import { exportCalibrationSheet } from './lib/utils/calibration-export';
+  import { exportCalibrationForRip } from './lib/utils/calibration-rip';
   import type { HalftoneExportOptions } from './lib/utils/export';
   import {
     HALFTONE_DEFAULTS,
@@ -106,6 +107,8 @@
   let exportReady = $state(false);
   let exporting = $state<HalftoneExportKind | null>(null);
   let calibrating = $state(false);
+  let preparingRip = $state(false);
+  let lastExportTiming = $state<{ label: string; ms: number } | null>(null);
   let exportMessage = $state<string | null>(null);
   let exportError = $state<string | null>(null);
   let canvasRef = $state<HalftoneCanvasHandle | null>(null);
@@ -307,11 +310,17 @@
     exporting = kind;
     exportMessage = null;
     exportError = null;
+    lastExportTiming = null;
 
+    const startedAt = performance.now();
     try {
       const result = await canvasRef.exportPng(kind);
       downloadBlob(result.blob, result.filename);
-      exportMessage = `Descargado: ${result.filename} · ${result.width} × ${result.height} px`;
+      const ms = result.durationMs ?? performance.now() - startedAt;
+      lastExportTiming = { label: EXPORT_LABELS[kind], ms };
+      exportMessage =
+        `Descargado: ${result.filename} · ${result.width} × ${result.height} px · ` +
+        `${Math.round(ms)} ms`;
     } catch (cause) {
       exportError =
         cause instanceof Error
@@ -349,11 +358,17 @@
     calibrating = true;
     exportMessage = null;
     exportError = null;
+    lastExportTiming = null;
 
+    const startedAt = performance.now();
     try {
       const result = await exportCalibrationSheet(currentExportOptions());
       downloadBlob(result.blob, result.filename);
-      exportMessage = `Hoja de calibración: ${result.filename} · ${result.width} × ${result.height} px`;
+      const ms = result.durationMs ?? performance.now() - startedAt;
+      lastExportTiming = { label: 'hoja de calibración', ms };
+      exportMessage =
+        `Hoja de calibración: ${result.filename} · ${result.width} × ${result.height} px · ` +
+        `${Math.round(ms)} ms`;
     } catch (cause) {
       exportError =
         cause instanceof Error
@@ -361,6 +376,33 @@
           : 'No se pudo generar la hoja de calibración.';
     } finally {
       calibrating = false;
+    }
+  }
+
+  async function downloadRipSheet() {
+    if (preparingRip) return;
+
+    preparingRip = true;
+    exportMessage = null;
+    exportError = null;
+    lastExportTiming = null;
+
+    const startedAt = performance.now();
+    try {
+      const result = await exportCalibrationForRip(currentExportOptions());
+      downloadBlob(result.blob, result.filename);
+      const ms = result.durationMs ?? performance.now() - startedAt;
+      lastExportTiming = { label: 'hoja para RIP', ms };
+      exportMessage =
+        `Hoja para RIP: ${result.filename} · ${result.width} × ${result.height} px · ` +
+        `${Math.round(ms)} ms`;
+    } catch (cause) {
+      exportError =
+        cause instanceof Error
+          ? `No se pudo generar la hoja para RIP: ${cause.message}`
+          : 'No se pudo generar la hoja para RIP.';
+    } finally {
+      preparingRip = false;
     }
   }
 </script>
@@ -896,7 +938,7 @@
           <button
             type="button"
             onclick={() => downloadPng('color')}
-            disabled={!source || !exportReady || exporting !== null || cellPitch < 1}
+            disabled={!source || !exportReady || exporting !== null || calibrating || preparingRip || cellPitch < 1}
           >
             {exporting === 'color' ? 'Procesando…' : 'Color (separación)'}
           </button>
@@ -904,7 +946,7 @@
             type="button"
             class="secondary"
             onclick={() => downloadPng('underbase')}
-            disabled={!source || !exportReady || !underbase || exporting !== null || cellPitch < 1}
+            disabled={!source || !exportReady || !underbase || exporting !== null || calibrating || preparingRip || cellPitch < 1}
           >
             {exporting === 'underbase' ? 'Procesando…' : 'Base blanca'}
           </button>
@@ -912,7 +954,7 @@
             type="button"
             class="secondary"
             onclick={() => downloadPng('composite')}
-            disabled={!source || !exportReady || exporting !== null || cellPitch < 1}
+            disabled={!source || !exportReady || exporting !== null || calibrating || preparingRip || cellPitch < 1}
           >
             {exporting === 'composite' ? 'Procesando…' : 'Composite'}
           </button>
@@ -920,16 +962,38 @@
             type="button"
             class="secondary"
             onclick={downloadCalibration}
-            disabled={calibrating || exporting !== null || cellPitch < 1}
+            disabled={calibrating || preparingRip || exporting !== null || cellPitch < 1}
           >
             {calibrating ? 'Generando hoja…' : 'Hoja de calibración'}
           </button>
+          <button
+            type="button"
+            class="secondary"
+            onclick={downloadRipSheet}
+            disabled={preparingRip || calibrating || exporting !== null || cellPitch < 1}
+          >
+            {preparingRip ? 'Generando RIP…' : 'Hoja para RIP'}
+          </button>
         </div>
+
+        {#if lastExportTiming}
+          <p class="export-timing" role="status">
+            Tiempo de la última exportación ({lastExportTiming.label}):
+            <strong>{Math.round(lastExportTiming.ms)} ms</strong>
+          </p>
+        {/if}
 
         {#if calibrating}
           <p class="export-status" role="status">
             <span class="spinner" aria-hidden="true"></span>
             Generando hoja de calibración…
+          </p>
+        {/if}
+
+        {#if preparingRip}
+          <p class="export-status" role="status">
+            <span class="spinner" aria-hidden="true"></span>
+            Generando hoja transparente para RIP…
           </p>
         {/if}
 
@@ -958,6 +1022,11 @@
         <p class="hint">
           La hoja de calibración reúne Color, Base blanca y Composite con los
           ajustes actuales; sus etiquetas se añaden después del semitono.
+        </p>
+        <p class="hint">
+          <strong>Hoja para RIP</strong> es una sola placa de color transparente
+          de 4 × 5,33″. No incluye fondos ni base blanca: el RIP la genera desde
+          el alfa.
         </p>
       </fieldset>
 
@@ -1452,6 +1521,21 @@
     background: #0f1115;
     font: 0.74rem/1.5 ui-monospace, monospace;
     color: #b8b2a8;
+  }
+
+  .export-timing {
+    margin: 0;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid #3b3325;
+    border-radius: 8px;
+    background: #17130d;
+    font: 0.76rem/1.4 ui-monospace, monospace;
+    color: #f0b45f;
+  }
+
+  .export-timing strong {
+    color: #f5f0e8;
+    font-weight: 600;
   }
 
   .spinner {

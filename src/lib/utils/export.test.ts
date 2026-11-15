@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { HalftoneExportOptions } from './export';
-import { exportFilename } from './export';
+import { exportFilename, requiredPasses } from './export';
 
 const options: HalftoneExportOptions = {
   lpi: 45,
@@ -43,5 +43,42 @@ describe('export filenames', () => {
 
   it('reflects dark polarity in the filename', () => {
     expect(exportFilename('color', { ...options, polarity: 'dark' })).toContain('_dark_color.png');
+  });
+});
+
+describe('export passes', () => {
+  it('renders only the requested color pass', () => {
+    expect(requiredPasses(['color'], { underbase: true })).toEqual({
+      color: true,
+      underbase: false,
+    });
+  });
+
+  it('renders only the white pass for the underbase export', () => {
+    expect(requiredPasses(['underbase'], { underbase: true })).toEqual({
+      color: false,
+      underbase: true,
+    });
+  });
+
+  it('renders both passes for a composite with underbase', () => {
+    expect(requiredPasses(['composite'], { underbase: true })).toEqual({
+      color: true,
+      underbase: true,
+    });
+  });
+
+  it('skips the white pass for a composite without underbase', () => {
+    expect(requiredPasses(['composite'], { underbase: false })).toEqual({
+      color: true,
+      underbase: false,
+    });
+  });
+
+  it('shares both passes across a full calibration sheet', () => {
+    expect(requiredPasses(['color', 'underbase', 'composite'], { underbase: true })).toEqual({
+      color: true,
+      underbase: true,
+    });
   });
 });

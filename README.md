@@ -47,9 +47,11 @@ La demo incorpora rampas tonal y de alfa, parches de cobertura, color, texto y t
 
 ## Calibración DTF
 
-El botón **Hoja de calibración** genera una lámina con degradados, parches de cobertura, círculos, líneas finas, tipografía, color sólido y transparencia usando los ajustes actuales. Reúne en un solo PNG las separaciones Color, Base blanca (si está activa) y Composite; las etiquetas se dibujan después del semitono para que no se tramaden. El PNG conserva el DPI mediante pHYs.
+El botón **Hoja de calibración** genera una lámina con degradados, parches de cobertura, círculos, líneas finas, tipografía, color sólido y transparencia usando los ajustes actuales. Reúne en un solo PNG las separaciones Color, Base blanca (si está activa) y Composite; las etiquetas se dibujan después del semitono para que no se tramaden. El PNG conserva el DPI mediante pHYs. La hoja reutiliza una sola sesión WebGPU para todos los paneles y muestra el tiempo de generación al terminar.
 
 Sirve para validar físicamente la pérdida de puntos en luces, el cierre de sombras, la legibilidad y la correspondencia entre blanco y color después de aplicar polvo, curar, prensar y lavar.
+
+**Hoja para RIP** genera una sola placa de color transparente de 4 × 5,33″ (1200 × 1599 px a 300 DPI), sin fondos de simulación ni base blanca. Está pensada para RIP que generan la underbase desde el alfa y conserva las etiquetas sólidas después del semitono.
 
 ## Alcance de producción
 

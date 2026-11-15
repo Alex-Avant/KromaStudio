@@ -1,24 +1,13 @@
 import type { HalftoneExportKind, HalftoneExportResult } from '../types/halftone';
 import type { CalibrationLabel } from './calibration-image';
 import { createCalibrationImage } from './calibration-image';
-import { exportHalftonePng, type HalftoneExportOptions } from './export';
+import { exportHalftoneLayers, type HalftoneExportOptions } from './export';
 import { addPngDpi } from './png';
 
 interface CalibrationPanel {
   kind: HalftoneExportKind;
   title: string;
   result: HalftoneExportResult;
-}
-
-function isLightColor(hex: string): boolean {
-  const match = /^#([0-9a-f]{6})$/i.exec(hex);
-  if (!match) return false;
-
-  const value = Number.parseInt(match[1], 16);
-  const r = ((value >> 16) & 255) / 255;
-  const g = ((value >> 8) & 255) / 255;
-  const b = (value & 255) / 255;
-  return r * 0.299 + g * 0.587 + b * 0.114 > 0.55;
 }
 
 export async function composeCalibrationSheet(
@@ -99,17 +88,31 @@ export async function composeCalibrationSheet(
       ctx.drawImage(bitmap, x, imageY, panelWidth, panelHeight);
 
       // Las etiquetas se dibujan después del semitono para no rasterizarlas.
-      const textColor =
-        panel.kind === 'composite'
-          ? isLightColor(options.shirtColor)
-            ? '#18110a'
-            : '#f5f0e8'
-          : '#f5f0e8';
-      ctx.fillStyle = textColor;
+      // Cada una lleva un fondo oscuro para conservar contraste en cualquier
+      // panel, incluida la base blanca.
       for (const label of labels) {
-        ctx.font = `${label.size}px system-ui, sans-serif`;
+        ctx.font = `${label.weight ?? 500} ${label.size}px system-ui, sans-serif`;
         ctx.textAlign = label.align ?? 'left';
-        ctx.fillText(label.text, x + label.x, imageY + label.y);
+        const textWidth = ctx.measureText(label.text).width;
+        const anchorX = x + label.x;
+        const baseline = imageY + label.y;
+        const left =
+          label.align === 'center'
+            ? anchorX - textWidth / 2
+            : label.align === 'right'
+              ? anchorX - textWidth
+              : anchorX;
+        const top = baseline - label.size * 0.82;
+
+        ctx.fillStyle = 'rgba(10, 11, 14, 0.82)';
+        ctx.fillRect(
+          left - 8,
+          top - 5,
+          textWidth + 16,
+          label.size * 1.12 + 10,
+        );
+        ctx.fillStyle = '#f5f0e8';
+        ctx.fillText(label.text, anchorX, baseline);
       }
       ctx.textAlign = 'left';
     });
@@ -146,6 +149,7 @@ export async function composeCalibrationSheet(
 export async function exportCalibrationSheet(
   options: HalftoneExportOptions,
 ): Promise<HalftoneExportResult> {
+  const startedAt = performance.now();
   const { bitmap, labels } = await createCalibrationImage();
   try {
     const kinds: Array<{ kind: HalftoneExportKind; title: string }> = [
@@ -154,12 +158,26 @@ export async function exportCalibrationSheet(
     if (options.underbase) kinds.push({ kind: 'underbase', title: 'Base blanca' });
     kinds.push({ kind: 'composite', title: 'Composite' });
 
-    const panels: CalibrationPanel[] = [];
-    for (const { kind, title } of kinds) {
-      const result = await exportHalftonePng(bitmap, options, kind, bitmap);
-      panels.push({ kind, title, result });
-    }
-    return await composeCalibrationSheet(panels, labels, options);
+    // Una sola sesión WebGPU: dispositivo, pipeline, imagen y pasadas se
+    // comparten entre los tres paneles.
+    const results = await exportHalftoneLayers(
+      bitmap,
+      options,
+      kinds.map((entry) => entry.kind),
+      bitmap,
+    );
+
+    const panels: CalibrationPanel[] = kinds.map(({ kind, title }) => {
+      const result = results[kind];
+      if (!result) {
+        throw new Error(`No se pudo generar la capa ${kind} de la calibración.`);
+      }
+      return { kind, title, result };
+    });
+
+    const sheet = await composeCalibrationSheet(panels, labels, options);
+    sheet.durationMs = performance.now() - startedAt;
+    return sheet;
   } finally {
     bitmap.close();
   }

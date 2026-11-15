@@ -96,6 +96,8 @@ export interface HalftoneExportResult {
   filename: string;
   width: number;
   height: number;
+  /** Tiempo total de preparación, render y codificación del PNG. */
+  durationMs?: number;
 }
 
 export interface HalftonePreviewCanvases {
