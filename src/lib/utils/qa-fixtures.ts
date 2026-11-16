@@ -50,6 +50,17 @@ export const QA_ALPHA_RAMP: QaFixture = {
   },
 };
 
+export const QA_MIDTONE: QaFixture = {
+  id: 'midtone',
+  name: 'Gris medio uniforme para medir frecuencia',
+  width: 256,
+  height: 256,
+  draw(ctx) {
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(0, 0, this.width, this.height);
+  },
+};
+
 export const QA_TRANSPARENT: QaFixture = {
   id: 'transparent',
   name: 'Imagen completamente transparente',
@@ -64,6 +75,7 @@ export const QA_FIXTURES: readonly QaFixture[] = [
   QA_TONE_LADDER,
   QA_POLARITY_BLOCKS,
   QA_ALPHA_RAMP,
+  QA_MIDTONE,
   QA_TRANSPARENT,
 ];
 

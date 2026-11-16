@@ -3,6 +3,8 @@ import {
   cellCenterCanvas,
   cellSizePx,
   circleCellArea,
+  diamondCellArea,
+  ellipseCellArea,
   gridSampleAt,
   screenInk,
   screenThreshold,
@@ -68,6 +70,44 @@ describe('AM screen geometry', () => {
     expect(circleCellArea(0.6)).toBeLessThan(Math.PI * 0.6 * 0.6);
     expect(circleCellArea(0.6)).toBeGreaterThan(0.9);
     expect(circleCellArea(0.70710678)).toBeCloseTo(1, 5);
+  });
+
+  it('compensates clipped ellipse and diamond areas', () => {
+    expect(ellipseCellArea(0.5)).toBeCloseTo(0.5, 3);
+    expect(ellipseCellArea(1)).toBeLessThan(1);
+    expect(ellipseCellArea(1.75)).toBeCloseTo(1, 5);
+
+    expect(diamondCellArea(0.5)).toBeCloseTo(0.5, 6);
+    expect(diamondCellArea(0.75)).toBeCloseTo(0.875, 6);
+    expect(diamondCellArea(1)).toBeCloseTo(1, 6);
+  });
+
+  it('keeps every shape at the requested coverage', () => {
+    const samples = 400;
+    const coverages = [0.5, 0.75, 0.9];
+    const shapes: ScreenShape[] = ['circle', 'ellipse', 'diamond', 'square', 'line'];
+
+    for (const shape of shapes) {
+      const counts = new Map<number, number>(coverages.map((coverage) => [coverage, 0]));
+      for (let row = 0; row < samples; row++) {
+        for (let column = 0; column < samples; column++) {
+          const localX = (column + 0.5) / samples - 0.5;
+          const localY = (row + 0.5) / samples - 0.5;
+          const threshold = screenThreshold(localX, localY, shape);
+          for (const coverage of coverages) {
+            if (threshold <= coverage) counts.set(coverage, (counts.get(coverage) ?? 0) + 1);
+          }
+        }
+      }
+
+      for (const coverage of coverages) {
+        const area = (counts.get(coverage) ?? 0) / (samples * samples);
+        expect(
+          Math.abs(area - coverage),
+          `${shape} con cobertura ${coverage} midió ${area.toFixed(4)}`,
+        ).toBeLessThan(0.02);
+      }
+    }
   });
 
   it('keeps all shape thresholds ordered and inside the expected bounds', () => {

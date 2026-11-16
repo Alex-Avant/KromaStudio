@@ -6,6 +6,7 @@
     type HalftoneColorMode,
     type HalftoneDotShape,
     type HalftoneExportKind,
+    type HalftoneExportResult,
     type HalftoneImageSource,
     type HalftonePreviewMode,
     type HalftonePreviewView,
@@ -110,6 +111,7 @@
   let preparingRip = $state(false);
   let lastExportTiming = $state<{ label: string; ms: number } | null>(null);
   let exportMessage = $state<string | null>(null);
+  let exportWarning = $state<string | null>(null);
   let exportError = $state<string | null>(null);
   let canvasRef = $state<HalftoneCanvasHandle | null>(null);
 
@@ -301,6 +303,17 @@
     setTimeout(() => URL.revokeObjectURL(url), 1500);
   }
 
+  function reductionWarning(result: HalftoneExportResult): string | null {
+    if (!result.downscaled) return null;
+    const effective =
+      result.effectiveDpi !== undefined ? Math.round(result.effectiveDpi) : null;
+    return (
+      `La GPU redujo la salida a ${result.width} × ${result.height} px` +
+      (effective !== null ? ` (${effective} DPI efectivos)` : '') +
+      '. Se conservaron el tamaño físico y el LPI; hay menos detalle por pulgada.'
+    );
+  }
+
   async function downloadPng(kind: HalftoneExportKind) {
     if (!canvasRef) {
       exportError = 'La vista previa aún no está lista para exportar.';
@@ -310,6 +323,7 @@
     exporting = kind;
     exportMessage = null;
     exportError = null;
+    exportWarning = null;
     lastExportTiming = null;
 
     const startedAt = performance.now();
@@ -318,6 +332,7 @@
       downloadBlob(result.blob, result.filename);
       const ms = result.durationMs ?? performance.now() - startedAt;
       lastExportTiming = { label: EXPORT_LABELS[kind], ms };
+      exportWarning = reductionWarning(result);
       exportMessage =
         `Descargado: ${result.filename} · ${result.width} × ${result.height} px · ` +
         `${Math.round(ms)} ms`;
@@ -358,6 +373,7 @@
     calibrating = true;
     exportMessage = null;
     exportError = null;
+    exportWarning = null;
     lastExportTiming = null;
 
     const startedAt = performance.now();
@@ -366,6 +382,7 @@
       downloadBlob(result.blob, result.filename);
       const ms = result.durationMs ?? performance.now() - startedAt;
       lastExportTiming = { label: 'hoja de calibración', ms };
+      exportWarning = reductionWarning(result);
       exportMessage =
         `Hoja de calibración: ${result.filename} · ${result.width} × ${result.height} px · ` +
         `${Math.round(ms)} ms`;
@@ -385,6 +402,7 @@
     preparingRip = true;
     exportMessage = null;
     exportError = null;
+    exportWarning = null;
     lastExportTiming = null;
 
     const startedAt = performance.now();
@@ -393,6 +411,7 @@
       downloadBlob(result.blob, result.filename);
       const ms = result.durationMs ?? performance.now() - startedAt;
       lastExportTiming = { label: 'hoja para RIP', ms };
+      exportWarning = reductionWarning(result);
       exportMessage =
         `Hoja para RIP: ${result.filename} · ${result.width} × ${result.height} px · ` +
         `${Math.round(ms)} ms`;
@@ -616,7 +635,7 @@
           </label>
 
           <div class="presets" role="group" aria-label="Presets de LPI">
-            {#each [35, 45, 55, 65] as value}
+            {#each [25, 35, 45] as value}
               <button
                 type="button"
                 class:active={lpi === value}
@@ -981,6 +1000,10 @@
             Tiempo de la última exportación ({lastExportTiming.label}):
             <strong>{Math.round(lastExportTiming.ms)} ms</strong>
           </p>
+        {/if}
+
+        {#if exportWarning}
+          <p class="export-warning" role="status">{exportWarning}</p>
         {/if}
 
         {#if calibrating}
@@ -1536,6 +1559,16 @@
   .export-timing strong {
     color: #f5f0e8;
     font-weight: 600;
+  }
+
+  .export-warning {
+    margin: 0;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid #6b4c25;
+    border-radius: 8px;
+    background: #221a10;
+    font: 0.76rem/1.45 system-ui, sans-serif;
+    color: #f0b45f;
   }
 
   .spinner {

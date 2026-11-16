@@ -38,6 +38,18 @@
 const PI: f32 = 3.141592653589793;
 const LUMA_WEIGHTS: vec3<f32> = vec3<f32>(0.299, 0.587, 0.114);
 const ELLIPSE_ASPECT: f32 = 1.5;
+const ELLIPSE_LUT_MAX: f32 = 1.75;
+
+// Área de la elipse recortada por la celda, en función del área sin recortar.
+// Generada por integración numérica para aspect = 1.5.
+const ELLIPSE_AREA_LUT: array<f32, 33> = array<f32, 33>(
+    0.0, 0.054683, 0.109380, 0.164065, 0.218749, 0.273431, 0.328129,
+    0.382813, 0.437486, 0.492191, 0.544804, 0.589155, 0.629210,
+    0.666359, 0.701220, 0.734248, 0.765748, 0.795908, 0.824888,
+    0.852852, 0.879887, 0.906079, 0.929983, 0.947584, 0.961531,
+    0.972701, 0.981573, 0.988467, 0.993590, 0.997127, 0.999222,
+    0.999992, 1.0,
+);
 
 fn rotate2d(p: vec2<f32>, angle: f32) -> vec2<f32> {
     let c = cos(angle);
@@ -113,6 +125,26 @@ fn circle_cell_area(radius: f32) -> f32 {
     return clamp(PI * r * r - 4.0 * cap, 0.0, 1.0);
 }
 
+// Área de la elipse recortada por la celda. La tabla evita integrales por
+// píxel y mantiene la cobertura de la elipse alineada con el tono de entrada.
+fn ellipse_cell_area(raw_area: f32) -> f32 {
+    let position = clamp(raw_area / ELLIPSE_LUT_MAX, 0.0, 1.0) * 32.0;
+    let index = u32(floor(position));
+    let next = min(index + 1u, 32u);
+    return mix(ELLIPSE_AREA_LUT[index], ELLIPSE_AREA_LUT[next], fract(position));
+}
+
+// Área del diamante recortada por la celda: por encima de r = 0.5 se
+// descuentan las cuatro esquinas que quedan fuera del rombo.
+fn diamond_cell_area(radius: f32) -> f32 {
+    let r = clamp(radius, 0.0, 1.0);
+    if (r <= 0.5) {
+        return 2.0 * r * r;
+    }
+    let remaining = 1.0 - r;
+    return 1.0 - 2.0 * remaining * remaining;
+}
+
 // Umbral periódico del screen AM, expresado como fracción de área (0..1).
 // Comparar la cobertura del píxel contra este umbral equivale a dibujar el
 // punto cuya área coincide con la tonalidad local. Es el spot function de un
@@ -121,17 +153,18 @@ fn screen_threshold(cell_local: vec2<f32>) -> f32 {
     let shape = u32(u_levels.z + 0.5);
 
     if (shape == 1u) {
-        // Elipse: semiejes proporcionales a sqrt(área).
-        return PI * (
+        // Elipse: área recortada por la celda mediante tabla interpolada.
+        let raw_area = PI * (
             cell_local.x * cell_local.x / ELLIPSE_ASPECT +
             cell_local.y * cell_local.y * ELLIPSE_ASPECT
         );
+        return ellipse_cell_area(raw_area);
     }
 
     if (shape == 2u) {
-        // Diamante: área = 2 · r², con r = |x| + |y|.
+        // Diamante: área recortada por la celda.
         let radius = abs(cell_local.x) + abs(cell_local.y);
-        return 2.0 * radius * radius;
+        return diamond_cell_area(radius);
     }
 
     if (shape == 3u) {

@@ -16,7 +16,7 @@ En Termux, si un script responde `<bin>: not found`, ejecuta npm con `LD_PRELOAD
 
 ## Motor de semitono
 
-- Rejilla AM configurable mediante LPI, DPI y ángulo, con presets de partida (35/45/55/65 LPI y 22,5°/45°).
+- Rejilla AM configurable mediante LPI, DPI y ángulo, con presets de partida (25/35/45 LPI y 22,5°/45°).
 - Puntos de círculo, elipse, diamante, cuadrado o línea.
 - Screen AM por umbral en cada píxel, como Bitmap > Halftone Screen de Photoshop: la posición de las celdas es fija y el tamaño del punto sigue la tonalidad local.
 - Una muestra de color, luminancia y alfa por píxel para conservar tipografía, líneas finas y contornos.
@@ -41,7 +41,7 @@ La escala **Ajustar** adapta la imagen al panel; **100 %** muestra un píxel ló
 
 La vista **Comparar** superpone el original y el resultado con un divisor arrastrable; ambos lados comparten la misma resolución de preview y posición. También puede moverse el divisor con las flechas del teclado.
 
-Se pueden descargar PNG transparentes de color y underbase, además de un composite sobre el color de camiseta seleccionado. **Color** es la separación de tinta (sin blanco ni choke); **Base blanca** aplica el estilo de base y el choke; **Composite** combina ambos. Las descargas se habilitan cuando la imagen actual terminó de cargarse. El nombre del archivo incluye polaridad y ajustes tonales; choke y estilo de base solo aparecen cuando afectan a la capa exportada. El DPI controla la geometría de la trama y se guarda como metadatos físicos (pHYs) en el PNG.
+Se pueden descargar PNG transparentes de color y underbase, además de un composite sobre el color de camiseta seleccionado. **Color** es la separación de tinta (sin blanco ni choke); **Base blanca** aplica el estilo de base y el choke; **Composite** combina ambos. Las descargas se habilitan cuando la imagen actual terminó de cargarse. El nombre del archivo incluye polaridad y ajustes tonales; choke y estilo de base solo aparecen cuando afectan a la capa exportada. El DPI controla la geometría de la trama y se guarda como metadatos físicos (pHYs) en el PNG. Si la GPU debe reducir los píxeles, se conservan el tamaño físico y el LPI bajando el DPI efectivo; la app muestra un aviso y el archivo declara ambos DPI.
 
 La demo incorpora rampas tonal y de alfa, parches de cobertura, color, texto y transparencia para comparar cambios del motor.
 
@@ -61,4 +61,4 @@ KromaStudio genera una trama artística en el PNG; no sustituye el screening, lo
 
 `npm run check`, `npm run build` y `npm test`. Las pruebas de Vitest cubren geometría del screen, configuración persistida, empaquetado de polaridad/base, nombres de exportación, calibración y metadatos pHYs. No compilan WGSL ni leen píxeles de la GPU.
 
-Para una comprobación real del render/export, abre **`/qa.html`** con `npm run dev` en un navegador con WebGPU. La página exporta fixtures sintéticos y verifica dimensiones, 300 DPI, monotonía y precisión de cobertura, polaridad, transparencia, alfa y coherencia entre color y underbase. Permite descargar un informe JSON. El submit/toBlob de Chromium headless con SwiftShader en Termux tiene limitaciones conocidas, así que esa página debe ejecutarse en un navegador WebGPU real.
+Para una comprobación real del render/export, abre **`/qa.html`** con `npm run dev` en un navegador con WebGPU. La página exporta fixtures sintéticos y verifica dimensiones, DPI y pHYs, monotonía y precisión de cobertura en las cinco formas, polaridad, transparencia, alfa, coherencia entre color y underbase, frecuencia real en el raster, DPI efectivo con reducción y la matriz 25/35/45 LPI × 300/600 DPI. Permite descargar un informe JSON. El submit/toBlob de Chromium headless con SwiftShader en Termux tiene limitaciones conocidas, así que esa página debe ejecutarse en un navegador WebGPU real.

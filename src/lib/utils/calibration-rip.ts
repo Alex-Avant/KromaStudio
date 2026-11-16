@@ -18,10 +18,16 @@ function formatAngle(value: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
-export function ripCalibrationFilename(options: HalftoneExportOptions): string {
+export function ripCalibrationFilename(
+  options: HalftoneExportOptions,
+  metrics?: { requestedDpi: number; effectiveDpi: number; downscaled: boolean },
+): string {
+  const dpiPart = metrics?.downscaled
+    ? `${Math.round(metrics.requestedDpi)}DPI_eff${Math.round(metrics.effectiveDpi)}DPI`
+    : `${Math.round(options.dpi)}DPI`;
   return (
     `kroma_calibracion_rip_${options.dotShape}_LPI${Math.round(options.lpi)}` +
-    `_ANG${formatAngle(options.angle)}_${Math.round(options.dpi)}DPI_4x5.33in_` +
+    `_ANG${formatAngle(options.angle)}_${dpiPart}_4x5.33in_` +
     `${options.polarity}.png`
   );
 }
@@ -63,12 +69,20 @@ export async function exportCalibrationForRip(
       ctx.textAlign = 'left';
       ctx.lineJoin = 'round';
 
-      const headerSize = Math.max(12, Math.round(width * 0.018));
-      const headerX = Math.round(width * 0.065);
-      const headerY = Math.round(width * 0.038);
+      const requestedDpi = rendered.requestedDpi ?? options.dpi;
+      const effectiveDpi = rendered.effectiveDpi ?? options.dpi;
+      const downscaled = rendered.downscaled ?? false;
+      const outputWidth = rendered.width;
+      const outputHeight = rendered.height;
+      const headerSize = Math.max(12, Math.round(outputWidth * 0.018));
+      const headerX = Math.round(outputWidth * 0.065);
+      const headerY = Math.round(outputWidth * 0.038);
+      const dpiText = downscaled
+        ? `${Math.round(requestedDpi)} DPI → ${Math.round(effectiveDpi)} eff`
+        : `${Math.round(options.dpi)} DPI`;
       const header =
         `KromaStudio · ${options.lpi} LPI · ${options.angle}° · ${options.dotShape}` +
-        ` · ${options.dpi} DPI · ${options.polarity === 'light' ? 'Luces' : 'Sombras'}` +
+        ` · ${dpiText} · ${options.polarity === 'light' ? 'Luces' : 'Sombras'}` +
         ' · Color para RIP';
       ctx.font = `600 ${headerSize}px ui-monospace, monospace`;
       ctx.lineWidth = Math.max(2, Math.round(headerSize * 0.14));
@@ -79,23 +93,36 @@ export async function exportCalibrationForRip(
 
       // Etiquetas sólidas después del semitono, con contorno para que se lean
       // tanto sobre prendas claras como oscuras.
+      const labelScaleX = outputWidth / width;
+      const labelScaleY = outputHeight / height;
+      const labelScale = Math.min(labelScaleX, labelScaleY);
       for (const label of labels) {
-        ctx.font = `${label.weight ?? 500} ${label.size}px system-ui, sans-serif`;
+        const fontSize = label.size * labelScale;
+        ctx.font = `${label.weight ?? 500} ${fontSize}px system-ui, sans-serif`;
         ctx.textAlign = label.align ?? 'left';
-        ctx.lineWidth = Math.max(2, Math.round(label.size * 0.14));
+        ctx.lineWidth = Math.max(2, Math.round(fontSize * 0.14));
         ctx.strokeStyle = '#111111';
         ctx.fillStyle = '#ffffff';
-        ctx.strokeText(label.text, label.x, label.y);
-        ctx.fillText(label.text, label.x, label.y);
+        const labelX = label.x * labelScaleX;
+        const labelY = label.y * labelScaleY;
+        ctx.strokeText(label.text, labelX, labelY);
+        ctx.fillText(label.text, labelX, labelY);
       }
       ctx.textAlign = 'left';
 
       const blob = await canvasToPngBlob(canvas);
       return {
-        blob: await addPngDpi(blob, options.dpi),
-        filename: ripCalibrationFilename(options),
-        width: rendered.width,
-        height: rendered.height,
+        blob: await addPngDpi(blob, effectiveDpi),
+        filename: ripCalibrationFilename(options, {
+          requestedDpi,
+          effectiveDpi,
+          downscaled,
+        }),
+        width: outputWidth,
+        height: outputHeight,
+        requestedDpi,
+        effectiveDpi,
+        downscaled,
         durationMs: performance.now() - startedAt,
       };
     } finally {

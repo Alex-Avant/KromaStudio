@@ -85,4 +85,15 @@ describe('PNG DPI metadata', () => {
     const result = await addPngDpi(original, 300);
     expect([...new Uint8Array(await result.arrayBuffer())]).toEqual([1, 2, 3, 4]);
   });
+
+  it('can record an effective DPI after GPU reduction', async () => {
+    const original = new Blob([makePng()], { type: 'image/png' });
+    const withDpi = await addPngDpi(original, 150);
+    const chunks = parseChunks(new Uint8Array(await withDpi.arrayBuffer()));
+    const phys = chunks.find((entry) => entry.type === 'pHYs');
+    if (!phys) throw new Error('pHYs no encontrado.');
+
+    const view = new DataView(phys.data.buffer, phys.data.byteOffset, phys.data.byteLength);
+    expect(view.getUint32(0, false)).toBe(Math.round(150 / 0.0254));
+  });
 });

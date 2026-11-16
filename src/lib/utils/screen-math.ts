@@ -11,6 +11,16 @@ export interface GridSample {
 
 const PI = Math.PI;
 const ELLIPSE_ASPECT = 1.5;
+const ELLIPSE_LUT_MAX = 1.75;
+
+// Área de la elipse recortada por la celda en función del área sin recortar.
+// Se generó por integración numérica para aspect = 1.5 y se interpola en WGSL.
+const ELLIPSE_AREA_LUT = [
+  0, 0.054683, 0.10938, 0.164065, 0.218749, 0.273431, 0.328129, 0.382813, 0.437486,
+  0.492191, 0.544804, 0.589155, 0.62921, 0.666359, 0.70122, 0.734248, 0.765748,
+  0.795908, 0.824888, 0.852852, 0.879887, 0.906079, 0.929983, 0.947584, 0.961531,
+  0.972701, 0.981573, 0.988467, 0.99359, 0.997127, 0.999222, 0.999992, 1,
+] as const;
 
 export function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
@@ -73,6 +83,21 @@ export function circleCellArea(radius: number): number {
   return Math.min(1, Math.max(0, PI * r * r - 4 * cap));
 }
 
+export function ellipseCellArea(rawArea: number): number {
+  const position = clamp01(rawArea / ELLIPSE_LUT_MAX) * (ELLIPSE_AREA_LUT.length - 1);
+  const index = Math.floor(position);
+  const next = Math.min(ELLIPSE_AREA_LUT.length - 1, index + 1);
+  const fraction = position - index;
+  return ELLIPSE_AREA_LUT[index] * (1 - fraction) + ELLIPSE_AREA_LUT[next] * fraction;
+}
+
+export function diamondCellArea(radius: number): number {
+  const r = Math.min(1, Math.max(0, radius));
+  if (r <= 0.5) return 2 * r * r;
+  const remaining = 1 - r;
+  return 1 - 2 * remaining * remaining;
+}
+
 /**
  * Umbral periódico del screen, equivalente al spot function escalar del WGSL.
  * Devuelve la fracción de área necesaria para que ese punto reciba tinta.
@@ -83,11 +108,11 @@ export function screenThreshold(
   shape: ScreenShape,
 ): number {
   if (shape === 'ellipse') {
-    return PI * (localX * localX / ELLIPSE_ASPECT + localY * localY * ELLIPSE_ASPECT);
+    const rawArea = PI * (localX * localX / ELLIPSE_ASPECT + localY * localY * ELLIPSE_ASPECT);
+    return ellipseCellArea(rawArea);
   }
   if (shape === 'diamond') {
-    const radius = Math.abs(localX) + Math.abs(localY);
-    return 2 * radius * radius;
+    return diamondCellArea(Math.abs(localX) + Math.abs(localY));
   }
   if (shape === 'square') {
     const radius = Math.max(Math.abs(localX), Math.abs(localY));

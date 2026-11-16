@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { HalftoneExportOptions } from './export';
-import { exportFilename, requiredPasses } from './export';
+import { exportFilename, exportMetricsFor, requiredPasses } from './export';
 
 const options: HalftoneExportOptions = {
   lpi: 45,
@@ -43,6 +43,48 @@ describe('export filenames', () => {
 
   it('reflects dark polarity in the filename', () => {
     expect(exportFilename('color', { ...options, polarity: 'dark' })).toContain('_dark_color.png');
+  });
+
+  it('declares requested and effective DPI when the GPU reduces pixels', () => {
+    const filename = exportFilename('color', options, {
+      requestedDpi: 300,
+      effectiveDpi: 150,
+      exportScale: 0.5,
+      exportPitch: 5,
+      downscaled: true,
+    });
+    expect(filename).toContain('300DPI_eff150DPI');
+    expect(filename).not.toContain('_CHK');
+  });
+});
+
+describe('export metrics', () => {
+  it('keeps the requested DPI when no reduction is needed', () => {
+    const metrics = exportMetricsFor(
+      { width: 1024, height: 512, logicalWidth: 1024, logicalHeight: 512 },
+      300,
+      30,
+    );
+    expect(metrics.downscaled).toBe(false);
+    expect(metrics.exportScale).toBe(1);
+    expect(metrics.effectiveDpi).toBe(300);
+    expect(metrics.exportPitch).toBeCloseTo(10, 6);
+  });
+
+  it('preserves physical size and LPI by lowering the effective DPI', () => {
+    const logicalWidth = 1024;
+    const metrics = exportMetricsFor(
+      { width: 512, height: 256, logicalWidth, logicalHeight: 512 },
+      300,
+      30,
+    );
+    expect(metrics.downscaled).toBe(true);
+    expect(metrics.exportScale).toBe(0.5);
+    expect(metrics.effectiveDpi).toBe(150);
+    expect(metrics.exportPitch).toBeCloseTo(5, 6);
+
+    const physicalWidth = 512 / metrics.effectiveDpi;
+    expect(physicalWidth).toBeCloseTo(logicalWidth / 300, 6);
   });
 });
 

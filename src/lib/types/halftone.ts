@@ -98,6 +98,12 @@ export interface HalftoneExportResult {
   height: number;
   /** Tiempo total de preparación, render y codificación del PNG. */
   durationMs?: number;
+  /** DPI solicitado por el usuario. */
+  requestedDpi?: number;
+  /** DPI real tras una posible reducción por límites de la GPU. */
+  effectiveDpi?: number;
+  /** true si la GPU redujo los píxeles de salida. */
+  downscaled?: boolean;
 }
 
 export interface HalftonePreviewCanvases {

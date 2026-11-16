@@ -1,8 +1,14 @@
-import type { HalftonePolarity } from './lib/types/halftone';
+import type { HalftoneDotShape, HalftonePolarity } from './lib/types/halftone';
 import type { HalftoneExportOptions } from './lib/utils/export';
-import { exportHalftoneLayers, exportHalftonePng } from './lib/utils/export';
+import {
+  exportHalftoneLayers,
+  exportHalftonePng,
+  exportMetricsFor,
+} from './lib/utils/export';
+import { estimatePeriod } from './lib/utils/qa-analysis';
 import {
   QA_ALPHA_RAMP,
+  QA_MIDTONE,
   QA_POLARITY_BLOCKS,
   QA_TONE_LADDER,
   QA_TONE_VALUES,
@@ -37,16 +43,31 @@ interface AlphaImage {
   alpha: Uint8ClampedArray;
 }
 
-function optionsFor(polarity: HalftonePolarity, underbase = false): HalftoneExportOptions {
+const SHAPE_LABELS: Record<HalftoneDotShape, string> = {
+  circle: 'círculo',
+  ellipse: 'elipse',
+  diamond: 'diamante',
+  square: 'cuadrado',
+  line: 'línea',
+};
+
+function optionsFor(
+  polarity: HalftonePolarity,
+  underbase = false,
+  dotShape: HalftoneDotShape = 'circle',
+  lpi = 30,
+  dpi = 300,
+  angle = 45,
+): HalftoneExportOptions {
   return {
-    lpi: 30,
-    angle: 45,
+    lpi,
+    angle,
     contrast: 1,
     gamma: 1,
     minDot: 0.005,
     shadowPoint: 1,
-    dotShape: 'circle',
-    dpi: 300,
+    dotShape,
+    dpi,
     underbase,
     choke: 0,
     underbaseStyle: 'dot',
@@ -108,6 +129,15 @@ function maxAlpha(image: AlphaImage): number {
   return max / 255;
 }
 
+function readColumn(image: AlphaImage, x: number): number[] {
+  const column: number[] = [];
+  const columnIndex = Math.min(image.width - 1, Math.max(0, Math.round(x)));
+  for (let row = 0; row < image.height; row++) {
+    column.push(image.alpha[row * image.width + columnIndex] / 255);
+  }
+  return column;
+}
+
 async function readPpi(blob: Blob): Promise<{ x: number; y: number } | null> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const view = new DataView(bytes.buffer);
@@ -138,6 +168,13 @@ function monotonic(values: number[], direction: 'up' | 'down'): boolean {
     if (direction === 'down' && values[index] - 0.01 > values[index - 1]) return false;
   }
   return true;
+}
+
+function maxCoverageDeviation(means: number[]): number {
+  const expected = QA_TONE_VALUES.slice(1, -1);
+  return Math.max(
+    ...expected.map((value, index) => Math.abs(means[index + 1] - value)),
+  );
 }
 
 const format = (value: number) => value.toFixed(3);
@@ -196,15 +233,11 @@ async function runQa(): Promise<QaReport> {
       lightMeans.map(format).join(' · '),
     );
 
-    const middleExpected = QA_TONE_VALUES.slice(1, -1);
-    const middleMeasured = lightMeans.slice(1, -1);
-    const maxDeviation = Math.max(
-      ...middleExpected.map((expected, index) => Math.abs(middleMeasured[index] - expected)),
-    );
+    const middleDeviation = maxCoverageDeviation(lightMeans);
     add(
-      'Precisión de cobertura (Luces)',
-      maxDeviation < 0.03,
-      `desviación máxima ${maxDeviation.toFixed(4)}`,
+      'Precisión de cobertura · círculo',
+      middleDeviation < 0.03,
+      `desviación máxima ${middleDeviation.toFixed(4)}`,
     );
 
     const underbaseImage = await readAlpha(lightUnderbase);
@@ -238,6 +271,99 @@ async function runQa(): Promise<QaReport> {
   } finally {
     darkBitmap.close();
   }
+
+  const extraShapes: HalftoneDotShape[] = ['ellipse', 'diamond', 'square', 'line'];
+  for (const shape of extraShapes) {
+    const bitmap = await createFixtureBitmap(QA_TONE_LADDER);
+    try {
+      const rendered = await exportHalftonePng(
+        bitmap,
+        optionsFor('light', false, shape),
+        'color',
+        bitmap,
+      );
+      const means = patchMeans(await readAlpha(rendered.blob));
+      const deviation = maxCoverageDeviation(means);
+      add(
+        `Precisión de cobertura · ${SHAPE_LABELS[shape]}`,
+        deviation < 0.03,
+        `desviación máxima ${deviation.toFixed(4)} · ${means.map(format).join(' · ')}`,
+      );
+    } finally {
+      bitmap.close();
+    }
+  }
+
+  for (const lpi of [25, 35, 45]) {
+    for (const dpi of [300, 600]) {
+      const bitmap = await createFixtureBitmap(QA_TONE_LADDER);
+      try {
+        const rendered = await exportHalftonePng(
+          bitmap,
+          optionsFor('light', false, 'circle', lpi, dpi),
+          'color',
+          bitmap,
+        );
+        const image = await readAlpha(rendered.blob);
+        const means = patchMeans(image);
+        const deviation = maxCoverageDeviation(means);
+        const ppi = await readPpi(rendered.blob);
+        const dimensionsOk =
+          image.width === QA_TONE_LADDER.width && image.height === QA_TONE_LADDER.height;
+        const ppiOk = ppi?.x === Math.round(dpi / 0.0254);
+        add(
+          `Matriz LPI/DPI · ${lpi} LPI / ${dpi} DPI`,
+          deviation < 0.035 && dimensionsOk && ppiOk,
+          `desviación máxima ${deviation.toFixed(4)} · ` +
+            `${image.width}×${image.height} · pHYs ${ppi?.x ?? 'ausente'} · ` +
+            means.map(format).join(' · '),
+        );
+      } finally {
+        bitmap.close();
+      }
+    }
+  }
+
+  for (const lpi of [25, 35, 45]) {
+    const bitmap = await createFixtureBitmap(QA_MIDTONE);
+    try {
+      const rendered = await exportHalftonePng(
+        bitmap,
+        optionsFor('light', false, 'line', lpi, 300, 0),
+        'color',
+        bitmap,
+      );
+      const image = await readAlpha(rendered.blob);
+      const expected = 300 / lpi;
+      const minLag = Math.max(2, Math.floor(expected) - 3);
+      const maxLag = Math.ceil(expected) + 3;
+      const measured = estimatePeriod(
+        readColumn(image, image.width / 2),
+        minLag,
+        maxLag,
+      );
+      add(
+        `Frecuencia real · ${lpi} LPI`,
+        Math.abs(measured - expected) <= 0.75,
+        `esperado ${expected.toFixed(2)} px · medido ${measured.toFixed(2)} px`,
+      );
+    } finally {
+      bitmap.close();
+    }
+  }
+
+  const reducedMetrics = exportMetricsFor(
+    { width: 1200, height: 1600, logicalWidth: 2400, logicalHeight: 3200 },
+    300,
+    45,
+  );
+  add(
+    'DPI efectivo con reducción GPU',
+    reducedMetrics.downscaled &&
+      Math.abs(reducedMetrics.effectiveDpi - 150) < 0.001 &&
+      Math.abs(1200 / reducedMetrics.effectiveDpi - 2400 / 300) < 0.001,
+    `solicitado ${reducedMetrics.requestedDpi} · efectivo ${reducedMetrics.effectiveDpi.toFixed(1)} · escala ${reducedMetrics.exportScale}`,
+  );
 
   const transparentBitmap = await createFixtureBitmap(QA_TRANSPARENT);
   try {

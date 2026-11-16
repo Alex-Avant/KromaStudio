@@ -14,6 +14,8 @@ export async function composeCalibrationSheet(
   panels: CalibrationPanel[],
   labels: CalibrationLabel[],
   options: HalftoneExportOptions,
+  sourceWidth = 1200,
+  sourceHeight = 1600,
 ): Promise<HalftoneExportResult> {
   const rendered: ImageBitmap[] = [];
   try {
@@ -23,6 +25,13 @@ export async function composeCalibrationSheet(
 
     const panelWidth = panels[0].result.width;
     const panelHeight = panels[0].result.height;
+    const sample = panels[0].result;
+    const requestedDpi = sample.requestedDpi ?? options.dpi;
+    const effectiveDpi = sample.effectiveDpi ?? options.dpi;
+    const downscaled = sample.downscaled ?? false;
+    const dpiText = downscaled
+      ? `${Math.round(requestedDpi)} DPI → ${Math.round(effectiveDpi)} eff`
+      : `${Math.round(options.dpi)} DPI`;
     const margin = Math.round(panelWidth * 0.065);
     const gap = Math.round(panelWidth * 0.05);
     const header = Math.round(panelWidth * 0.24);
@@ -49,7 +58,7 @@ export async function composeCalibrationSheet(
     const summaryFont = Math.round(panelWidth * 0.024);
     ctx.font = `${summaryFont}px ui-monospace, monospace`;
     ctx.fillText(
-      `${options.lpi} LPI · ${options.angle}° · ${options.dotShape} · ${options.dpi} DPI · ` +
+      `${options.lpi} LPI · ${options.angle}° · ${options.dotShape} · ${dpiText} · ` +
         `${options.colorMode === 'color' ? 'Color Original' : 'Monocromo'} · ` +
         `${options.polarity === 'light' ? 'Luces imprimen' : 'Sombras imprimen'}`,
       margin,
@@ -88,21 +97,24 @@ export async function composeCalibrationSheet(
       ctx.drawImage(bitmap, x, imageY, panelWidth, panelHeight);
 
       // Las etiquetas se dibujan después del semitono para no rasterizarlas.
-      // Cada una lleva un fondo oscuro para conservar contraste en cualquier
-      // panel, incluida la base blanca.
+      // Si la GPU redujo el panel, coordenadas y tipografía se escalan con él.
+      const labelScaleX = panelWidth / sourceWidth;
+      const labelScaleY = panelHeight / sourceHeight;
+      const labelScale = Math.min(labelScaleX, labelScaleY);
       for (const label of labels) {
-        ctx.font = `${label.weight ?? 500} ${label.size}px system-ui, sans-serif`;
+        const fontSize = label.size * labelScale;
+        ctx.font = `${label.weight ?? 500} ${fontSize}px system-ui, sans-serif`;
         ctx.textAlign = label.align ?? 'left';
         const textWidth = ctx.measureText(label.text).width;
-        const anchorX = x + label.x;
-        const baseline = imageY + label.y;
+        const anchorX = x + label.x * labelScaleX;
+        const baseline = imageY + label.y * labelScaleY;
         const left =
           label.align === 'center'
             ? anchorX - textWidth / 2
             : label.align === 'right'
               ? anchorX - textWidth
               : anchorX;
-        const top = baseline - label.size * 0.82;
+        const top = baseline - fontSize * 0.82;
 
         if (!label.plain) {
           ctx.fillStyle = 'rgba(10, 11, 14, 0.82)';
@@ -110,11 +122,11 @@ export async function composeCalibrationSheet(
             left - 8,
             top - 5,
             textWidth + 16,
-            label.size * 1.12 + 10,
+            fontSize * 1.12 + 10,
           );
         }
 
-        ctx.lineWidth = Math.max(2, Math.round(label.size * 0.12));
+        ctx.lineWidth = Math.max(2, Math.round(fontSize * 0.12));
         ctx.strokeStyle = 'rgba(10, 11, 14, 0.9)';
         ctx.strokeText(label.text, anchorX, baseline);
         ctx.fillStyle = '#f5f0e8';
@@ -138,13 +150,20 @@ export async function composeCalibrationSheet(
       }, 'image/png');
     });
 
+    const dpiPart = downscaled
+      ? `${Math.round(requestedDpi)}DPI_eff${Math.round(effectiveDpi)}DPI`
+      : `${Math.round(options.dpi)}DPI`;
+
     return {
-      blob: await addPngDpi(blob, options.dpi),
+      blob: await addPngDpi(blob, effectiveDpi),
       filename:
         `kroma_calibracion_${options.dotShape}_LPI${Math.round(options.lpi)}` +
-        `_ANG${options.angle}_${Math.round(options.dpi)}DPI_${options.polarity}.png`,
+        `_ANG${options.angle}_${dpiPart}_${options.polarity}.png`,
       width,
       height,
+      requestedDpi,
+      effectiveDpi,
+      downscaled,
     };
   } finally {
     rendered.forEach((bitmap) => bitmap.close());
@@ -181,7 +200,13 @@ export async function exportCalibrationSheet(
       return { kind, title, result };
     });
 
-    const sheet = await composeCalibrationSheet(panels, labels, options);
+    const sheet = await composeCalibrationSheet(
+      panels,
+      labels,
+      options,
+      bitmap.width,
+      bitmap.height,
+    );
     sheet.durationMs = performance.now() - startedAt;
     return sheet;
   } finally {

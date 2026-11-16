@@ -36,4 +36,13 @@ describe('RIP calibration sheet', () => {
     expect(name).toContain('kroma_calibracion_rip_circle_LPI45_ANG45_300DPI_4x5.33in_light.png');
     expect(name).not.toContain('composite');
   });
+
+  it('declares effective DPI when the GPU reduces the sheet', () => {
+    const name = ripCalibrationFilename(options, {
+      requestedDpi: 300,
+      effectiveDpi: 150,
+      downscaled: true,
+    });
+    expect(name).toContain('300DPI_eff150DPI_4x5.33in_light.png');
+  });
 });

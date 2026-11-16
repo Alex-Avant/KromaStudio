@@ -9,7 +9,7 @@ import type {
   HalftoneUnderbaseStyle,
   SvaderParameter,
 } from '../types/halftone';
-import { bitmapToPackedRgba, loadImage } from './image';
+import { bitmapToPackedRgba, loadImage, type PackedImage } from './image';
 import { buildHalftoneParameters, COLOR_MODE, UNDERBASE_MODE } from './parameters';
 import { addPngDpi } from './png';
 
@@ -63,14 +63,21 @@ function formatPercent(value: number, digits = 0): string {
   return digits > 0 ? scaled.toFixed(digits) : String(Math.round(scaled));
 }
 
-export function exportFilename(kind: HalftoneExportKind, options: HalftoneExportOptions): string {
+export function exportFilename(
+  kind: HalftoneExportKind,
+  options: HalftoneExportOptions,
+  metrics?: ExportMetrics,
+): string {
   const suffix = kind === 'underbase' ? 'white' : kind;
+  const dpiLabel = metrics?.downscaled
+    ? `${Math.round(metrics.requestedDpi)}DPI_eff${Math.round(metrics.effectiveDpi)}DPI`
+    : `${Math.round(options.dpi)}DPI`;
   const parts = [
     'kroma',
     options.dotShape,
     `LPI${Math.round(options.lpi)}`,
     `ANG${formatValue(options.angle)}`,
-    `${Math.round(options.dpi)}DPI`,
+    dpiLabel,
     `C${formatValue(options.contrast)}`,
     `G${formatValue(options.gamma)}`,
     `MD${formatPercent(options.minDot, 1)}`,
@@ -111,6 +118,39 @@ export function requiredPasses(
   return {
     color: requested.has('color') || composite,
     underbase: requested.has('underbase') || (composite && options.underbase),
+  };
+}
+
+export interface ExportMetrics {
+  requestedDpi: number;
+  effectiveDpi: number;
+  exportScale: number;
+  exportPitch: number;
+  downscaled: boolean;
+}
+
+/**
+ * Calcula la geometría real de salida. Si la GPU redujo el buffer, el DPI
+ * efectivo baja para conservar el tamaño físico y el LPI; las dimensiones
+ * físicas se derivan de las dimensiones lógicas originales.
+ */
+export function exportMetricsFor(
+  image: Pick<PackedImage, 'width' | 'height' | 'logicalWidth' | 'logicalHeight'>,
+  requestedDpi: number,
+  lpi: number,
+): ExportMetrics {
+  const safeDpi = Math.max(1, requestedDpi);
+  const safeLpi = Math.max(1, lpi);
+  const exportScale = Math.min(
+    image.width / Math.max(1, image.logicalWidth),
+    image.height / Math.max(1, image.logicalHeight),
+  );
+  return {
+    requestedDpi: safeDpi,
+    effectiveDpi: safeDpi * exportScale,
+    exportScale,
+    exportPitch: (safeDpi / safeLpi) * exportScale,
+    downscaled: exportScale < 0.999999,
   };
 }
 
@@ -200,14 +240,10 @@ async function renderExport(
     throw new Error('La imagen es demasiado grande para el storage buffer de esta GPU.');
   }
 
-  const exportScale = Math.min(
-    width / image.logicalWidth,
-    height / image.logicalHeight,
-  );
-  const exportPitch = (options.dpi / Math.max(options.lpi, 1)) * exportScale;
-  if (exportPitch < 1) {
+  const metrics = exportMetricsFor(image, options.dpi, options.lpi);
+  if (metrics.exportPitch < 1) {
     throw new Error(
-      `La trama necesita ${exportPitch.toFixed(2)} px por celda en esta exportación. ` +
+      `La trama necesita ${metrics.exportPitch.toFixed(2)} px por celda en esta exportación. ` +
         'Sube los DPI, baja los LPI o usa una imagen de mayor resolución.',
     );
   }
@@ -380,13 +416,17 @@ async function renderExport(
         blob = await canvasToBlob(selectedCanvas);
       }
 
-      // Conserva el tamaño físico en el PNG (pHYs) para que el RIP lo lea bien.
-      blob = await addPngDpi(blob, options.dpi);
+      // Conserva el tamaño físico en el PNG (pHYs). Si la GPU redujo los
+      // píxeles, baja el DPI efectivo para mantener pulgadas y LPI reales.
+      blob = await addPngDpi(blob, metrics.effectiveDpi);
       results[requested] = {
         blob,
-        filename: exportFilename(requested, options),
+        filename: exportFilename(requested, options, metrics),
         width,
         height,
+        requestedDpi: metrics.requestedDpi,
+        effectiveDpi: metrics.effectiveDpi,
+        downscaled: metrics.downscaled,
       };
     }
 
