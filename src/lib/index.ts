@@ -7,6 +7,7 @@ export type {
   HalftoneExportKind,
   HalftoneExportResult,
   HalftoneImageSource,
+  HalftoneImageStats,
   HalftoneOptions,
   HalftonePolarity,
   HalftonePreviewCanvases,

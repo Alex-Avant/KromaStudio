@@ -16,6 +16,19 @@ export type HalftonePreviewView = 'result' | 'original' | 'underbase' | 'mask' |
 /** Estilo de la base blanca: tramada con la misma geometría de puntos o sólida. */
 export type HalftoneUnderbaseStyle = 'dot' | 'solid';
 
+/** Estadísticas de la imagen fuente para el preflight de exportación. */
+export interface HalftoneImageStats {
+  width: number;
+  height: number;
+  transparentRatio: number;
+  partialAlphaRatio: number;
+  opaqueRatio: number;
+  borderOpaqueRatio: number;
+  borderMeanLuma: number;
+  darkOpaqueBorder: boolean;
+  hasTransparency: boolean;
+}
+
 /**
  * Extremo tonal que produce la tinta. `light` imprime las zonas claras (flujo
  * de referencia de Photoshop); `dark` imprime las zonas oscuras.
@@ -84,6 +97,8 @@ export interface HalftoneCanvasProps {
   previewView?: HalftonePreviewView;
   /** Indica si la imagen actual ya está lista para exportar. */
   exportReady?: boolean;
+  /** Estadísticas de la imagen cargada, para el preflight. */
+  imageStats?: HalftoneImageStats | null;
   width?: string;
   height?: string;
 }

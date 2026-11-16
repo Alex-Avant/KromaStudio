@@ -1,4 +1,4 @@
-import type { HalftoneImageSource } from '../types/halftone';
+import type { HalftoneImageSource, HalftoneImageStats } from '../types/halftone';
 
 export interface LoadedImage {
   bitmap: ImageBitmap;
@@ -124,5 +124,74 @@ export function bitmapToPackedRgba(
     height,
     logicalWidth: bitmap.width,
     logicalHeight: bitmap.height,
+  };
+}
+
+/**
+ * Calcula cobertura de alfa y borde para el preflight. Se ejecuta sobre el
+ * buffer reducido del preview, así que es una estimación rápida de la fuente.
+ */
+export function analyzePackedRgba(
+  pixels: Uint32Array<ArrayBuffer>,
+  width: number,
+  height: number,
+  logicalWidth: number,
+  logicalHeight: number,
+): HalftoneImageStats {
+  const total = Math.max(0, width * height);
+  let transparent = 0;
+  let partial = 0;
+  let opaque = 0;
+
+  for (let index = 0; index < total; index++) {
+    const alpha = pixels[index] >>> 24;
+    if (alpha === 0) transparent++;
+    else if (alpha === 255) opaque++;
+    else partial++;
+  }
+
+  let borderCount = 0;
+  let borderOpaque = 0;
+  let borderLuma = 0;
+  const visitBorder = (index: number) => {
+    const packed = pixels[index];
+    const alpha = packed >>> 24;
+    borderCount++;
+    if (alpha === 255) {
+      borderOpaque++;
+      const r = packed & 0xff;
+      const g = (packed >>> 8) & 0xff;
+      const b = (packed >>> 16) & 0xff;
+      borderLuma += (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+    }
+  };
+
+  if (total > 0) {
+    for (let x = 0; x < width; x++) {
+      visitBorder(x);
+      if (height > 1) visitBorder((height - 1) * width + x);
+    }
+    for (let y = 1; y < height - 1; y++) {
+      visitBorder(y * width);
+      if (width > 1) visitBorder(y * width + width - 1);
+    }
+  }
+
+  const transparentRatio = total > 0 ? transparent / total : 0;
+  const partialAlphaRatio = total > 0 ? partial / total : 0;
+  const opaqueRatio = total > 0 ? opaque / total : 0;
+  const borderOpaqueRatio = borderCount > 0 ? borderOpaque / borderCount : 0;
+  const borderMeanLuma = borderOpaque > 0 ? borderLuma / borderOpaque : 0;
+
+  return {
+    width: logicalWidth,
+    height: logicalHeight,
+    transparentRatio,
+    partialAlphaRatio,
+    opaqueRatio,
+    borderOpaqueRatio,
+    borderMeanLuma,
+    darkOpaqueBorder: borderOpaqueRatio >= 0.9 && borderMeanLuma < 0.12,
+    hasTransparency: transparentRatio > 0.005 || partialAlphaRatio > 0.005,
   };
 }

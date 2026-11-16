@@ -2,13 +2,14 @@
   import { onDestroy } from 'svelte';
   import { WebGpuShader } from 'svader';
   import shaderCode from '../shaders/halftone.wgsl?raw';
-  import { bitmapToPackedRgba, loadImage } from '../utils/image';
+  import { analyzePackedRgba, bitmapToPackedRgba, loadImage } from '../utils/image';
   import { exportHalftonePng } from '../utils/export';
   import { buildHalftoneParameters, COLOR_MODE, MASK_MODE, UNDERBASE_MODE } from '../utils/parameters';
   import type {
     HalftoneCanvasProps,
     HalftoneExportKind,
     HalftoneExportResult,
+    HalftoneImageStats,
     HalftonePreviewCanvases,
   } from '../types/halftone';
 
@@ -35,6 +36,7 @@
     previewMode = 'fit',
     previewView = 'result',
     exportReady = $bindable(false),
+    imageStats = $bindable<HalftoneImageStats | null>(null),
     width = '100%',
     height = '100%',
   }: HalftoneCanvasProps = $props();
@@ -64,6 +66,7 @@
     let cancelled = false;
     loading = true;
     exportReady = false;
+    imageStats = null;
     error = null;
 
     (async () => {
@@ -88,10 +91,18 @@
         imageHeight = prepared.height;
         logicalWidth = prepared.logicalWidth;
         logicalHeight = prepared.logicalHeight;
+        imageStats = analyzePackedRgba(
+          prepared.pixels,
+          prepared.width,
+          prepared.height,
+          prepared.logicalWidth,
+          prepared.logicalHeight,
+        );
         exportReady = true;
       } catch (cause) {
         if (!cancelled) {
           pixels = null;
+          imageStats = null;
           error = cause instanceof Error ? cause.message : 'Error desconocido al cargar la imagen.';
 
           // Sin bitmap retenido no se puede exportar una imagen anterior.
