@@ -51,9 +51,9 @@
     align-items: center;
     gap: 0.85rem;
     padding: 0.4rem 0.1rem;
-    border-top: 1px solid #1d1f25;
-    font: 0.72rem/1.3 ui-monospace, monospace;
-    color: #8b857c;
+    border-top: 1px solid var(--border);
+    font: 0.69rem/1.3 var(--mono);
+    color: var(--text-2);
     overflow-x: auto;
     scrollbar-width: none;
   }
@@ -70,7 +70,7 @@
   }
 
   .key {
-    color: #5f5a54;
+    color: var(--muted);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     font-size: 0.66rem;
@@ -81,10 +81,17 @@
   }
 
   .state {
-    color: #f0b45f;
+    color: var(--warning);
   }
 
   .state.ready {
-    color: #9bd6a3;
+    color: var(--success);
+  }
+
+  @media (max-width: 520px) {
+    .status-bar {
+      gap: 0.65rem;
+      font-size: 0.64rem;
+    }
   }
 </style>

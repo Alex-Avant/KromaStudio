@@ -32,8 +32,8 @@
 </script>
 
 <div class="panel">
-  <section class="group" id="panel-imagen">
-    <h2 class="group-title">Imagen</h2>
+  <details class="group" id="panel-imagen" open>
+    <summary class="group-title">Imagen <span class="chevron" aria-hidden="true"></span></summary>
 
     <input
       bind:this={doc.fileInput}
@@ -57,10 +57,10 @@
       <p class="error" role="alert">{doc.fileError}</p>
     {/if}
     <p class="hint">PNG, JPG o WebP. Todo se procesa localmente.</p>
-  </section>
+  </details>
 
-  <section class="group" id="panel-trama">
-    <h2 class="group-title">Trama</h2>
+  <details class="group" id="panel-trama" open>
+    <summary class="group-title">Halftone <span class="chevron" aria-hidden="true"></span></summary>
 
     <label>
       <span>Forma de punto</span>
@@ -187,10 +187,10 @@
         exportación puede perder definición.
       </p>
     {/if}
-  </section>
+  </details>
 
-  <section class="group" id="panel-tonal">
-    <h2 class="group-title">Ajustes tonales</h2>
+  <details class="group" id="panel-tonal">
+    <summary class="group-title">Ajustes tonales <span class="chevron" aria-hidden="true"></span></summary>
 
     <label>
       <span>Modo de color</span>
@@ -313,10 +313,10 @@
       La polaridad decide si la tinta corresponde a las luces (referencia Photoshop)
       o a las sombras. El nivel de negro recorta el fondo oscuro.
     </p>
-  </section>
+  </details>
 
-  <section class="group" id="panel-base">
-    <h2 class="group-title">Base blanca</h2>
+  <details class="group" id="panel-base">
+    <summary class="group-title">Base blanca <span class="chevron" aria-hidden="true"></span></summary>
 
     <label class="switch">
       <input type="checkbox" bind:checked={editor.underbase} />
@@ -367,10 +367,35 @@
       La base tramada replica los puntos de color; la sólida cubre toda el área
       imprimible.
     </p>
-  </section>
+  </details>
 
-  <section class="group" id="panel-camiseta">
-    <h2 class="group-title">Camiseta</h2>
+  <details class="group" id="panel-separaciones">
+    <summary class="group-title">Separaciones <span class="chevron" aria-hidden="true"></span></summary>
+
+    <p class="hint">Inspecciona cada vista antes de preparar las placas PNG.</p>
+    <div class="separation-grid" role="group" aria-label="Vistas y separaciones">
+      {#each [
+        { id: 'result', label: 'Resultado', detail: 'Color + blanco' },
+        { id: 'original', label: 'Original', detail: 'Imagen fuente' },
+        { id: 'compare', label: 'Comparar', detail: 'Antes / después' },
+        { id: 'mask', label: 'Máscara', detail: 'Tinta en gris' },
+        { id: 'underbase', label: 'Base blanca', detail: 'Placa de blanco' },
+      ] as view}
+        <button
+          type="button"
+          class:active={editor.previewView === view.id}
+          aria-pressed={editor.previewView === view.id}
+          onclick={() => (editor.previewView = view.id as typeof editor.previewView)}
+        >
+          <span>{view.label}</span>
+          <small>{view.detail}</small>
+        </button>
+      {/each}
+    </div>
+  </details>
+
+  <details class="group" id="panel-camiseta">
+    <summary class="group-title">Camiseta <span class="chevron" aria-hidden="true"></span></summary>
 
     <div class="shirt-presets" role="group" aria-label="Color de camiseta">
       {#each SHIRT_PRESETS as preset}
@@ -396,41 +421,83 @@
         oninput={handleCustomColor}
       />
     </label>
-  </section>
+  </details>
 </div>
 
 <style>
   .panel {
     display: flex;
     flex-direction: column;
+    gap: 0.55rem;
   }
 
   .group {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    padding: 0.9rem 0;
-    border-bottom: 1px solid #1d1f25;
+    padding: 0.15rem 0.8rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--surface-2) 45%, var(--surface));
+    scroll-margin-block: 0.75rem;
   }
 
-  .group:last-child {
-    border-bottom: 0;
+  .group[open] {
+    padding-bottom: 0.85rem;
   }
 
   .group-title {
-    margin: 0;
-    font: 600 0.72rem/1.2 ui-monospace, monospace;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: #f0b45f;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.7rem;
+    min-height: 46px;
+    margin: 0 -0.8rem;
+    padding: 0.65rem 0.8rem;
+    border-radius: 11px;
+    color: var(--text);
+    font-size: 0.79rem;
+    font-weight: 650;
+    letter-spacing: 0.005em;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+
+  .group-title::-webkit-details-marker {
+    display: none;
+  }
+
+  .group-title:hover {
+    background: color-mix(in srgb, var(--surface-3) 60%, transparent);
+  }
+
+  .chevron {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 8px;
+    border-right: 1.5px solid var(--muted);
+    border-bottom: 1.5px solid var(--muted);
+    transform: rotate(45deg) translateY(-2px);
+    transition: transform 150ms ease;
+  }
+
+  .group[open] > .group-title .chevron {
+    transform: rotate(225deg) translate(-1px, -1px);
+  }
+
+  .group-title:focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 2px;
   }
 
   label {
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
-    font: 0.82rem/1.3 system-ui, sans-serif;
-    color: #cfc9bf;
+    color: var(--text-2);
+    font-size: 0.8rem;
+    line-height: 1.35;
   }
 
   label > span {
@@ -441,60 +508,67 @@
   }
 
   .number-input {
-    width: 4.5rem;
-    padding: 0.2rem 0.35rem;
-    border: 1px solid #24262d;
-    border-radius: 5px;
-    background: #0f1115;
-    color: #f5f0e8;
-    font: 0.75rem/1.2 ui-monospace, monospace;
+    width: 4.6rem;
+    min-height: 36px;
+    padding: 0.25rem 0.4rem;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg);
+    color: var(--text);
+    font: 0.75rem/1.2 var(--mono);
+    font-variant-numeric: tabular-nums;
     text-align: right;
   }
 
-  .number-input:focus-visible {
-    outline: 2px solid #f0b45f;
+  .number-input:focus-visible,
+  select:focus-visible {
+    outline: 2px solid var(--cyan);
     outline-offset: 2px;
   }
 
   .number-input:disabled {
-    opacity: 0.4;
+    opacity: 0.42;
   }
 
   input[type='range'] {
     width: 100%;
-    accent-color: #f0b45f;
+    height: 44px;
+    margin: 0;
+    accent-color: var(--primary);
+    cursor: pointer;
   }
 
   input[type='range']:disabled {
     opacity: 0.35;
+    cursor: not-allowed;
   }
 
   select {
     width: 100%;
-    padding: 0.45rem 0.55rem;
-    border: 1px solid #24262d;
-    border-radius: 7px;
-    background: #0f1115;
-    color: #f5f0e8;
-    font: 0.8rem/1.2 system-ui, sans-serif;
+    min-height: 44px;
+    padding: 0.5rem 0.65rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.79rem;
+    line-height: 1.2;
     cursor: pointer;
-  }
-
-  select:focus-visible {
-    outline: 2px solid #f0b45f;
-    outline-offset: 2px;
   }
 
   .switch {
     flex-direction: row;
     align-items: center;
-    gap: 0.55rem;
+    gap: 0.65rem;
+    min-height: 44px;
   }
 
   .switch input {
-    width: 0.95rem;
-    height: 0.95rem;
-    accent-color: #f0b45f;
+    width: 1.1rem;
+    height: 1.1rem;
+    flex: 0 0 1.1rem;
+    accent-color: var(--primary);
   }
 
   .switch input:disabled {
@@ -503,27 +577,39 @@
 
   .row {
     display: flex;
-    gap: 0.45rem;
+    gap: 0.5rem;
   }
 
   .row button {
+    min-height: 44px;
     flex: 1 1 0;
-    padding: 0.5rem 0.6rem;
-    border-radius: 7px;
-    font: 600 0.78rem/1.2 system-ui, sans-serif;
+    padding: 0.55rem 0.6rem;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 650;
+    line-height: 1.2;
     cursor: pointer;
   }
 
   .primary {
-    border: 1px solid #f0b45f;
-    background: #f0b45f;
-    color: #18110a;
+    border: 1px solid var(--primary);
+    background: var(--primary);
+    color: var(--primary-ink);
+  }
+
+  .primary:hover {
+    background: #7546e8;
   }
 
   .ghost {
-    border: 1px solid #2a2c33;
-    background: transparent;
-    color: #a8a29a;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  .ghost:hover {
+    border-color: var(--primary-text);
   }
 
   .row button:disabled {
@@ -534,22 +620,25 @@
   .presets {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.3rem;
+    gap: 0.35rem;
   }
 
   .presets button {
-    padding: 0.2rem 0.5rem;
-    border: 1px solid #24262d;
-    border-radius: 5px;
-    background: #121419;
-    color: #a8a29a;
-    font: 0.7rem/1.2 ui-monospace, monospace;
+    min-width: 44px;
+    min-height: 38px;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--surface);
+    color: var(--text-2);
+    font: 0.7rem/1.2 var(--mono);
     cursor: pointer;
   }
 
   .presets button.active {
-    border-color: #f0b45f;
-    color: #f0b45f;
+    border-color: var(--primary-text);
+    background: color-mix(in srgb, var(--primary) 18%, var(--surface));
+    color: var(--primary-text);
   }
 
   .shirt-presets {
@@ -563,24 +652,27 @@
     align-items: center;
     justify-content: center;
     gap: 0.35rem;
-    padding: 0.45rem 0.35rem;
-    border: 1px solid #24262d;
-    border-radius: 7px;
-    background: #0f1115;
-    color: #cfc9bf;
-    font: 0.75rem/1.2 system-ui, sans-serif;
+    min-height: 44px;
+    padding: 0.4rem 0.25rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text-2);
+    font-family: inherit;
+    font-size: 0.72rem;
+    line-height: 1.2;
     cursor: pointer;
   }
 
   .shirt-swatch.active {
-    border-color: #f0b45f;
-    color: #f5f0e8;
+    border-color: var(--primary-text);
+    color: var(--text);
   }
 
   .swatch-dot {
     width: 0.8rem;
     height: 0.8rem;
-    border: 1px solid rgba(255, 255, 255, 0.28);
+    border: 1px solid rgb(255 255 255 / 32%);
     border-radius: 50%;
     background: var(--swatch);
   }
@@ -593,33 +685,99 @@
   }
 
   .color-picker input[type='color'] {
-    width: 2.4rem;
-    height: 1.8rem;
-    padding: 0;
-    border: 1px solid #24262d;
-    border-radius: 6px;
-    background: transparent;
+    width: 48px;
+    height: 44px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-2);
     cursor: pointer;
   }
 
   .file-name {
     overflow: hidden;
     margin: 0;
-    font: 0.75rem/1.4 ui-monospace, monospace;
-    color: #cfc9bf;
+    color: var(--text);
+    font: 0.73rem/1.4 var(--mono);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .hint {
     margin: 0;
-    font: 0.75rem/1.5 system-ui, sans-serif;
-    color: #7f7a73;
+    color: var(--muted);
+    font-size: 0.74rem;
+    line-height: 1.5;
   }
 
   .error {
     margin: 0;
-    font: 0.78rem/1.4 system-ui, sans-serif;
-    color: #ffb4a8;
+    color: var(--error);
+    font-size: 0.78rem;
+    line-height: 1.4;
+  }
+
+  .separation-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+
+  .separation-grid button {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0.25rem;
+    min-height: 58px;
+    padding: 0.55rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--bg);
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .separation-grid button.active {
+    border-color: var(--primary-text);
+    background: color-mix(in srgb, var(--primary) 17%, var(--surface));
+  }
+
+  .separation-grid button span {
+    font-size: 0.73rem;
+    font-weight: 650;
+  }
+
+  .separation-grid button small {
+    color: var(--muted);
+    font-size: 0.61rem;
+  }
+
+  .separation-grid button:focus-visible,
+  .presets button:focus-visible,
+  .row button:focus-visible,
+  .shirt-swatch:focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 2px;
+  }
+
+  @media (max-width: 880px) {
+    .panel {
+      gap: 0.45rem;
+    }
+
+    .group {
+      gap: 0.7rem;
+    }
+
+    .group-title {
+      min-height: 48px;
+    }
+
+    .number-input,
+    .presets button {
+      min-height: 44px;
+    }
   }
 </style>

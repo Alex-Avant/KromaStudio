@@ -496,7 +496,7 @@
     z-index: 4;
     width: 2px;
     margin-left: -1px;
-    background: #f0b45f;
+    background: var(--cyan);
     pointer-events: none;
   }
 
@@ -509,10 +509,10 @@
     width: 2.75rem;
     height: 2.75rem;
     padding: 0;
-    border: 2px solid #f0b45f;
+    border: 2px solid var(--cyan);
     border-radius: 50%;
     background: rgba(16, 18, 22, 0.92);
-    color: #f0b45f;
+    color: var(--cyan);
     cursor: ew-resize;
     pointer-events: auto;
     touch-action: none;
@@ -527,7 +527,7 @@
   }
 
   .compare-handle:focus-visible {
-    outline: 2px solid #f5f0e8;
+    outline: 2px solid var(--text);
     outline-offset: 3px;
   }
 
@@ -537,8 +537,8 @@
     z-index: 5;
     padding: 0.25rem 0.55rem;
     border-radius: 999px;
-    background: rgba(10, 11, 14, 0.72);
-    color: #f5f0e8;
+    background: rgb(16 19 27 / 78%);
+    color: var(--text);
     font: 0.7rem/1.2 ui-monospace, monospace;
     letter-spacing: 0.04em;
     pointer-events: none;
@@ -573,8 +573,8 @@
     padding: 1.5rem;
     text-align: center;
     font: 0.9rem/1.4 system-ui, sans-serif;
-    color: #e9e4dc;
-    background: rgba(10, 11, 14, 0.72);
+    color: var(--text);
+    background: rgb(16 19 27 / 78%);
     backdrop-filter: blur(6px);
   }
 
@@ -584,7 +584,7 @@
   }
 
   .error {
-    color: #ffb4a8;
+    color: var(--error);
   }
 
   .fallback strong {

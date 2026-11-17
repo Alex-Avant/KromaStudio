@@ -38,6 +38,7 @@ export class EditorState {
   customShirtColor = $state(HALFTONE_DEFAULTS.shirtColor);
   previewMode = $state<HalftonePreviewMode>('fit');
   previewView = $state<HalftonePreviewView>('result');
+  previewBackground = $state<'checkerboard' | 'black' | 'white' | 'shirt'>('checkerboard');
 
   cellPitch = $derived(this.dpi / Math.max(this.lpi, 1));
   safeWhitePoint = $derived(
