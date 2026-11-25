@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   clampNumberInput,
   clampRegisteredInput,
+  clampZoomPercent,
   handlePercentInput,
   rangeProgressPercent,
+  zoomScrollOffset,
 } from './inputs';
 
 function fakeEvent(value: string): Event {
@@ -48,5 +50,14 @@ describe('numeric inputs', () => {
     expect(value).toBe(0.08);
     clampRegisteredInput(fakeEvent('500'), (next) => (value = next), 'lpi');
     expect(value).toBe(60);
+  });
+
+  it('clamps zoom and preserves the image point at the viewport center', () => {
+    expect(clampZoomPercent(13)).toBe(25);
+    expect(clampZoomPercent(137)).toBe(135);
+    expect(clampZoomPercent(900)).toBe(400);
+    expect(clampZoomPercent(Number.NaN)).toBe(100);
+    expect(zoomScrollOffset(100, 400, 1, 2)).toBe(400);
+    expect(zoomScrollOffset(0, 400, 1, 1)).toBe(0);
   });
 });

@@ -45,6 +45,27 @@ export function rangeProgressPercent(value: number, min: number, max: number): n
   return Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
 }
 
+export function clampZoomPercent(value: number): number {
+  if (!Number.isFinite(value)) return 100;
+  return Math.min(400, Math.max(25, Math.round(value / 5) * 5));
+}
+
+/** Mantiene centrado el mismo punto de imagen al cambiar el factor de zoom. */
+export function zoomScrollOffset(
+  scrollOffset: number,
+  viewportSize: number,
+  previousScale: number,
+  nextScale: number,
+  previousContentOffset = 0,
+  nextContentOffset = 0,
+): number {
+  if (![scrollOffset, viewportSize, previousScale, nextScale, previousContentOffset, nextContentOffset].every(Number.isFinite) || previousScale <= 0) {
+    return 0;
+  }
+  const sourceCenter = (scrollOffset + viewportSize / 2 - previousContentOffset) / previousScale;
+  return Math.max(0, sourceCenter * nextScale + nextContentOffset - viewportSize / 2);
+}
+
 /** Lee un número mostrado en unidades de UI y lo valida con el registro central. */
 export function clampRegisteredInput(
   event: Event,

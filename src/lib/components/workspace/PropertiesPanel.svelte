@@ -28,6 +28,7 @@
   function setShirtColor(color: string): void {
     editor.shirtColor = color;
     editor.customShirtColor = color;
+    editor.previewBackground = 'shirt';
   }
 
   function handleCustomColor(event: Event): void {
@@ -70,11 +71,7 @@
     <p class="hint">El tamaño de impresión se configura en Exportar.</p>
 
     <div class="subsection">
-      <h3>Vista del canvas</h3>
-      <div class="zoom-buttons" role="group" aria-label="Escala del canvas">
-        <button type="button" class:active={editor.previewMode === 'fit'} aria-pressed={editor.previewMode === 'fit'} onclick={() => (editor.previewMode = 'fit')}>Ajustar</button>
-        <button type="button" class:active={editor.previewMode === 'actual'} aria-pressed={editor.previewMode === 'actual'} onclick={() => (editor.previewMode = 'actual')}>100 %</button>
-      </div>
+      <h3>Previsualización</h3>
       <label class="field">
         <span>Fondo de previsualización</span>
         <select bind:value={editor.previewBackground}>
@@ -84,7 +81,7 @@
           <option value="shirt">Color de camiseta</option>
         </select>
       </label>
-      <p class="hint">En 100 %, arrastra sobre el canvas para desplazarte.</p>
+      <p class="hint">Controla el zoom desde la barra fija junto al canvas; en zoom real también puedes usar flechas o arrastrar.</p>
     </div>
 
     <div class="subsection">
@@ -258,9 +255,7 @@
   .info-item strong.unavailable { color: var(--muted); }
   .subsection { display: flex; flex-direction: column; gap: 0.65rem; padding-top: 0.65rem; border-top: 1px solid var(--border); }
   .subsection h3, .preset-section h3 { margin: 0; color: var(--primary-text); font-size: 0.7rem; font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase; }
-  .zoom-buttons { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0.4rem; }
-  .zoom-buttons button { min-height: 44px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text-2); font: 600 0.78rem/1.2 var(--mono); cursor: pointer; }
-  .zoom-buttons button.active, .preset-button.active { border-color: var(--primary-text); background: color-mix(in srgb,var(--primary) 18%,var(--surface)); color: var(--primary-text); }
+  .preset-button.active { border-color: var(--primary-text); background: color-mix(in srgb,var(--primary) 18%,var(--surface)); color: var(--primary-text); }
   .switch-list { display: flex; flex-direction: column; gap: 0.15rem; padding-top: 0.4rem; border-top: 1px solid var(--border); }
   .switch { display: flex; align-items: center; gap: 0.6rem; min-height: 44px; color: var(--text-2); font-size: 0.77rem; line-height: 1.3; }
   .switch input { width: 1.15rem; height: 1.15rem; flex: 0 0 1.15rem; accent-color: var(--primary); }
@@ -291,6 +286,6 @@
   .color-picker input { width: 48px; height: 44px; padding: 3px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
   .hint { margin: 0; color: var(--muted); font-size: 0.73rem; line-height: 1.45; }
   .error { margin: 0; color: var(--error); font-size: 0.78rem; line-height: 1.4; }
-  .zoom-buttons button:focus-visible, .preset-button:focus-visible, .presets button:focus-visible, .separation-grid button:focus-visible, .shirt-swatch:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
-  @media (max-width: 880px) { .panel { gap: 0.45rem; } .group { gap: 0.7rem; } .group-title { min-height: 48px; } .field select, .row button, .zoom-buttons button, .preset-button, .presets button, .switch { min-height: 48px; } }
+  .preset-button:focus-visible, .presets button:focus-visible, .separation-grid button:focus-visible, .shirt-swatch:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+  @media (max-width: 880px) { .panel { gap: 0.45rem; } .group { gap: 0.7rem; } .group-title { min-height: 48px; } .field select, .row button, .preset-button, .presets button, .switch { min-height: 48px; } }
 </style>

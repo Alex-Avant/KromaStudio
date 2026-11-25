@@ -128,6 +128,7 @@ export interface HalftoneCanvasProps {
   outputWidth?: number;
   outputHeight?: number;
   previewMode?: HalftonePreviewMode;
+  previewScale?: number;
   previewView?: HalftonePreviewView;
   /** Indica si la imagen actual ya está lista para exportar. */
   exportReady?: boolean;

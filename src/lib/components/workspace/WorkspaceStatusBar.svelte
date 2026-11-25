@@ -41,7 +41,7 @@
   const state = $derived(
     !doc.hasDocument ? 'Sin documento' : doc.exportReady ? 'Listo' : 'Preparando…',
   );
-  const zoom = $derived(editor.previewMode === 'actual' ? '100 %' : 'Ajustar');
+  const zoom = $derived(editor.previewMode === 'actual' ? `${editor.zoomPercent} %` : 'Ajustar');
   const screen = $derived(`${DOT_SHAPE_LABELS[editor.dotShape]} · ${editor.angle}°`);
 </script>
 

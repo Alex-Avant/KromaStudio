@@ -48,6 +48,7 @@ export class EditorState {
   shirtColor = $state(HALFTONE_DEFAULTS.shirtColor);
   customShirtColor = $state(HALFTONE_DEFAULTS.shirtColor);
   previewMode = $state<HalftonePreviewMode>('fit');
+  zoomPercent = $state(100);
   previewView = $state<HalftonePreviewView>('result');
   previewBackground = $state<'checkerboard' | 'black' | 'white' | 'shirt'>('checkerboard');
 

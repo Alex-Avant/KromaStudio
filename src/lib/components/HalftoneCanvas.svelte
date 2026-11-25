@@ -42,6 +42,7 @@
     showUnderbase = true,
     underbaseStyle = 'dot',
     previewMode = 'fit',
+    previewScale = 1,
     previewView = 'result',
     outputWidth,
     outputHeight,
@@ -190,7 +191,7 @@
   );
   const viewportStyle = $derived(
     previewMode === 'actual' && logicalWidth > 0 && logicalHeight > 0
-      ? `aspect-ratio: ${aspectRatio}; width: ${logicalWidth}px; height: ${logicalHeight}px;`
+      ? `aspect-ratio: ${aspectRatio}; width: ${logicalWidth * previewScale}px; height: ${logicalHeight * previewScale}px;`
       : `aspect-ratio: ${aspectRatio};`,
   );
 
@@ -263,6 +264,19 @@
       comparePosition = Math.min(98, comparePosition + step);
       event.preventDefault();
     }
+  }
+
+  function handlePanKey(event: KeyboardEvent) {
+    if (previewMode !== 'actual' || !root) return;
+    const scroller = root.closest('.checkerboard');
+    if (!(scroller instanceof HTMLElement)) return;
+    const step = event.shiftKey ? 120 : 40;
+    if (event.key === 'ArrowLeft') scroller.scrollLeft -= step;
+    else if (event.key === 'ArrowRight') scroller.scrollLeft += step;
+    else if (event.key === 'ArrowUp') scroller.scrollTop -= step;
+    else if (event.key === 'ArrowDown') scroller.scrollTop += step;
+    else return;
+    event.preventDefault();
   }
 
   function startPan(event: PointerEvent) {
@@ -355,18 +369,21 @@
   }
 </script>
 
+<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions: viewport del canvas admite paneo por puntero y flechas en zoom 100%+ -->
 <div
   bind:this={root}
   class="halftone-canvas"
   class:actual-pan={previewMode === 'actual'}
   class:panning
+  tabindex={previewMode === 'actual' ? 0 : -1}
   role="group"
-  aria-label="Vista previa del semitono con paneo"
+  aria-label={previewMode === 'actual' ? `Vista al ${Math.round(previewScale * 100)} por ciento; usa flechas o arrastra para desplazarte` : 'Vista previa del semitono'}
   style={`${viewportStyle} --compare-split: ${comparePosition}%;`}
   onpointerdown={startPan}
   onpointermove={movePan}
   onpointerup={endPan}
   onpointercancel={endPan}
+  onkeydown={handlePanKey}
 >
   {#if error}
     <div class="status error" role="alert">
