@@ -47,7 +47,7 @@
   };
 
   let activeSection = $state<WorkspaceSection>('halftone');
-  let mobilePanelOpen = $state(false);
+  let mobileSheetState = $state<'closed' | 'peek' | 'expanded'>('closed');
   const activeSectionLabel = $derived(
     ({
       imagen: 'Imagen',
@@ -59,28 +59,58 @@
     })[activeSection],
   );
 
-  function focusSection(section: WorkspaceSection, toggleIfActive = true): void {
+  function focusSection(section: WorkspaceSection, forceExpanded = false): void {
     if (section === 'capas') return;
     const mobile = window.matchMedia('(max-width: 880px)').matches;
+    const isCurrentSection = activeSection === section;
 
-    if (mobile && toggleIfActive && activeSection === section && mobilePanelOpen) {
-      mobilePanelOpen = false;
-      return;
+    if (mobile) {
+      if (forceExpanded) {
+        mobileSheetState = 'expanded';
+      } else if (!isCurrentSection) {
+        mobileSheetState = 'peek';
+      } else {
+        mobileSheetState = mobileSheetState === 'closed' ? 'peek' : 'closed';
+      }
     }
 
     activeSection = section;
-    if (mobile) mobilePanelOpen = true;
     const id = SECTION_IDS[section];
     if (!id) return;
     requestAnimationFrame(() => {
       const target = document.getElementById(id);
       if (mobile) {
         document.querySelectorAll<HTMLDetailsElement>('.inspector details').forEach((section) => {
-          section.open = section === target;
+          section.open = mobileSheetState !== 'closed' && section === target;
         });
       }
+      if (!mobile && target instanceof HTMLDetailsElement) target.open = true;
+      if (mobile && mobileSheetState === 'expanded' && target) {
+        scrollSheetTo(target);
+      } else if (!mobile) {
+        target?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+  }
+
+  function scrollSheetTo(target: HTMLElement): void {
+    const content = document.getElementById('mobile-sheet-content');
+    if (!content) return;
+
+    const offset = target.getBoundingClientRect().top - content.getBoundingClientRect().top;
+    content.scrollTo({ top: content.scrollTop + offset - 8, behavior: 'smooth' });
+  }
+
+  function toggleSheetExpansion(): void {
+    mobileSheetState = mobileSheetState === 'expanded' ? 'peek' : 'expanded';
+    if (mobileSheetState !== 'expanded') return;
+
+    const id = SECTION_IDS[activeSection];
+    if (!id) return;
+    requestAnimationFrame(() => {
+      const target = document.getElementById(id);
       if (target instanceof HTMLDetailsElement) target.open = true;
-      target?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      if (target) scrollSheetTo(target);
     });
   }
 
@@ -112,11 +142,11 @@
   />
 </svelte:head>
 
-<div class="shell" class:sheet-open={mobilePanelOpen}>
-  <WorkspaceHeader {doc} onExport={() => focusSection('exportacion', false)} />
+<div class="shell">
+  <WorkspaceHeader {doc} onExport={() => focusSection('exportacion', true)} />
 
   <div class="body">
-    <WorkspaceToolRail active={activeSection} onSelect={focusSection} />
+    <WorkspaceToolRail variant="desktop" active={activeSection} onSelect={focusSection} />
 
     <main class="main">
       <PreviewWorkspace
@@ -129,15 +159,45 @@
       <WorkspaceStatusBar {editor} {doc} exporter={exporter} />
     </main>
 
-    <aside class="inspector" class:mobile-open={mobilePanelOpen} aria-label="Inspector del semitono">
+    <aside
+      class="inspector"
+      class:mobile-closed={mobileSheetState === 'closed'}
+      class:mobile-peek={mobileSheetState === 'peek'}
+      class:mobile-expanded={mobileSheetState === 'expanded'}
+      aria-label="Inspector del semitono"
+    >
       <div class="sheet-head">
-        <span class="sheet-grab" aria-hidden="true"></span>
-        <span class="sheet-title">{activeSectionLabel}</span>
-        <button type="button" class="sheet-close" onclick={() => (mobilePanelOpen = false)} aria-label="Cerrar panel">Cerrar</button>
+        <button
+          type="button"
+          class="sheet-expand"
+          aria-expanded={mobileSheetState === 'expanded'}
+          aria-controls="mobile-sheet-content"
+          aria-label={mobileSheetState === 'expanded' ? 'Contraer panel' : 'Expandir panel'}
+          onclick={toggleSheetExpansion}
+        >
+          <span class="sheet-grab" aria-hidden="true"></span>
+          <span class="sheet-title">{activeSectionLabel}</span>
+          <span class="sheet-expand-label">{mobileSheetState === 'expanded' ? 'Contraer' : 'Expandir'}</span>
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d={mobileSheetState === 'expanded' ? 'm5 12 5-5 5 5' : 'm5 8 5 5 5-5'} />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="sheet-close"
+          onclick={() => (mobileSheetState = 'closed')}
+          aria-label="Cerrar panel"
+        >
+          Cerrar
+        </button>
       </div>
-      <PropertiesPanel {editor} {doc} />
-      <ExportPanel {editor} {doc} {exporter} />
+      <div class="sheet-content" id="mobile-sheet-content">
+        <PropertiesPanel {editor} {doc} />
+        <ExportPanel {editor} {doc} {exporter} />
+      </div>
     </aside>
+
+    <WorkspaceToolRail variant="mobile" active={activeSection} onSelect={focusSection} />
   </div>
 </div>
 
@@ -183,107 +243,166 @@
 
   @media (max-width: 880px) {
     .shell {
-      height: auto;
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
       min-height: 100svh;
-      overflow: visible;
-      padding-bottom: 72px;
+      overflow: hidden;
     }
 
     .body {
       display: flex;
       flex-direction: column;
+      flex: 1 1 auto;
       width: 100%;
       min-width: 0;
-      overflow: visible;
+      min-height: 0;
+      overflow: hidden;
     }
 
     .main {
+      flex: 1 1 auto;
+      width: 100%;
       min-height: 0;
-      height: min(62svh, 660px);
-      padding: 0.65rem 0.65rem 0.45rem;
+      height: auto;
+      padding: 0.45rem 0.55rem 0.35rem;
       overflow: hidden;
     }
 
     .inspector {
-      position: fixed;
-      z-index: 30;
-      right: 0;
-      bottom: 72px;
-      left: 0;
-      display: block;
-      max-height: min(46svh, 520px);
-      padding: 0 0.85rem 1rem;
-      border: 1px solid var(--border);
-      border-bottom: 0;
-      border-radius: 18px 18px 0 0;
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex: 0 0 auto;
+      flex-direction: column;
+      width: 100%;
+      min-height: 0;
+      max-height: none;
+      padding: 0 0.55rem;
+      border: 0;
+      border-top: 1px solid var(--border);
+      border-radius: 14px 14px 0 0;
       background: var(--surface);
-      box-shadow: 0 -16px 44px rgb(0 0 0 / 38%);
-      overflow: auto;
-      transform: translateY(calc(100% + 80px));
-      visibility: hidden;
-      transition: transform 220ms ease, visibility 220ms ease;
-      scrollbar-width: thin;
+      box-shadow: 0 -8px 24px rgb(0 0 0 / 18%);
+      overflow: hidden;
     }
 
-    .inspector.mobile-open {
-      transform: translateY(0);
-      visibility: visible;
+    .inspector.mobile-closed {
+      display: none;
+    }
+
+    .inspector.mobile-peek {
+      height: 58px;
+    }
+
+    .inspector.mobile-expanded {
+      flex: 0 0 min(42dvh, 380px);
+      height: min(42dvh, 380px);
+      max-height: min(42dvh, 380px);
     }
 
     .sheet-head {
-      position: sticky;
-      top: -1px;
-      z-index: 2;
-      display: grid;
-      grid-template-columns: 1fr auto 1fr;
+      position: relative;
+      display: flex;
       align-items: center;
-      min-height: 54px;
-      margin: 0 -0.85rem 0.15rem;
-      padding: 0.35rem 0.85rem;
+      flex: 0 0 57px;
+      gap: 0.5rem;
+      min-height: 57px;
+      margin: 0 -0.55rem;
+      padding: 0.25rem 0.55rem;
       border-bottom: 1px solid var(--border);
       background: var(--surface);
     }
 
     .sheet-grab {
-      position: absolute;
-      top: 7px;
-      left: 50%;
-      width: 36px;
-      height: 4px;
+      width: 4px;
+      height: 24px;
+      flex: 0 0 4px;
       border-radius: 4px;
-      background: var(--muted);
-      opacity: 0.55;
-      transform: translateX(-50%);
+      background: var(--primary);
+      opacity: 0.9;
+    }
+
+    .sheet-expand {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      flex: 1 1 auto;
+      min-width: 0;
+      min-height: 48px;
+      padding: 0 0.35rem;
+      border: 0;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--text);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .sheet-expand:focus-visible,
+    .sheet-close:focus-visible {
+      outline: 2px solid var(--cyan);
+      outline-offset: 2px;
     }
 
     .sheet-title {
-      grid-column: 2;
-      padding-top: 0.45rem;
-      color: var(--text);
-      font-size: 0.84rem;
+      min-width: 0;
+      font-size: 0.82rem;
       font-weight: 650;
     }
 
+    .sheet-expand-label {
+      margin-left: auto;
+      color: var(--primary-text);
+      font-size: 0.68rem;
+      white-space: nowrap;
+    }
+
+    .sheet-expand svg {
+      width: 18px;
+      height: 18px;
+      flex: 0 0 18px;
+      stroke: var(--primary-text);
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
     .sheet-close {
-      grid-column: 3;
-      justify-self: end;
+      flex: 0 0 auto;
       min-height: 44px;
-      padding: 0 0.7rem;
+      padding: 0 0.65rem;
       border: 1px solid var(--border);
-      border-radius: 9px;
+      border-radius: 8px;
       background: var(--surface-2);
       color: var(--text-2);
       font: inherit;
+      font-size: 0.7rem;
+      cursor: pointer;
     }
 
-    .main :global(.status-bar) {
-      padding: 0.4rem 0.1rem;
+    .sheet-content {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 0.4rem 0.05rem 0.75rem;
+      scrollbar-width: thin;
+      scrollbar-color: var(--primary) var(--surface-2);
     }
+
+    .mobile-peek .sheet-content {
+      display: none;
+    }
+
   }
 
-  @media (max-width: 420px) {
-    .main {
-      height: 59svh;
+  @media (max-height: 700px) and (max-width: 880px) {
+    .inspector.mobile-expanded {
+      flex-basis: min(30dvh, 260px);
+      height: min(30dvh, 260px);
+      max-height: min(30dvh, 260px);
     }
   }
 </style>

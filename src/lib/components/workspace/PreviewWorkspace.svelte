@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { HalftoneCanvas } from '../../index';
   import type { HalftoneCanvasHandle } from '../../types/halftone';
   import type { DocumentState } from '../../state/document.svelte';
@@ -13,6 +14,35 @@
   let { editor, doc, onCanvas }: Props = $props();
 
   let canvasRef = $state<HalftoneCanvasHandle | null>(null);
+  let canvasArea: HTMLDivElement | null = $state(null);
+  let fitFrameStyle = $state('');
+
+  function updateFitFrame(): void {
+    if (!canvasArea) return;
+
+    const areaWidth = canvasArea.clientWidth;
+    const areaHeight = canvasArea.clientHeight;
+    if (!areaWidth || !areaHeight) return;
+
+    const imageWidth = doc.imageStats?.width ?? areaWidth;
+    const imageHeight = doc.imageStats?.height ?? areaHeight;
+    const scale = Math.min(areaWidth / imageWidth, areaHeight / imageHeight);
+    fitFrameStyle = `--fit-width: ${imageWidth * scale}px; --fit-height: ${imageHeight * scale}px;`;
+  }
+
+  $effect(() => {
+    doc.imageStats?.width;
+    doc.imageStats?.height;
+    updateFitFrame();
+  });
+
+  onMount(() => {
+    if (!canvasArea) return;
+    const observer = new ResizeObserver(updateFitFrame);
+    observer.observe(canvasArea);
+    updateFitFrame();
+    return () => observer.disconnect();
+  });
 
   $effect(() => {
     onCanvas?.(canvasRef);
@@ -26,13 +56,14 @@
 
 <div class="preview">
   <div
-    class="canvas-area"
+    bind:this={canvasArea}
+    class="canvas-area checkerboard"
     class:dragging={doc.isDragging}
     class:actual={editor.previewMode === 'actual'}
     class:background-checker={editor.previewBackground === 'checkerboard'}
     class:background-black={editor.previewBackground === 'black'}
     class:background-white={editor.previewBackground === 'white'}
-    style={`--shirt-color: ${editor.shirtColor};`}
+    style={`--shirt-color: ${editor.shirtColor}; ${fitFrameStyle}`}
     role="region"
     aria-label="Vista previa y zona para soltar imágenes"
     ondragenter={onDragEnter}
@@ -88,7 +119,13 @@
     {/if}
   </div>
 
-  <div class="preview-toolbar">
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex: permite desplazar el control horizontal desde el teclado -->
+  <div
+    class="preview-toolbar"
+    role="region"
+    aria-label="Vistas, escala y fondo de previsualización"
+    tabindex="0"
+  >
     <div class="toolbar-row">
       <div class="toolbar-group" role="group" aria-label="Vista de la imagen">
       <span class="toolbar-label">Vista</span>
@@ -191,6 +228,20 @@
     box-shadow: inset 0 0 0 1px rgb(255 255 255 / 2%), 0 14px 40px rgb(0 0 0 / 20%);
   }
 
+  .canvas-area:not(.actual) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .canvas-area:not(.actual) :global(.halftone-canvas:not(.actual-pan)) {
+    width: var(--fit-width, 100%);
+    height: var(--fit-height, 100%);
+    max-width: 100%;
+    max-height: 100%;
+    flex: 0 0 auto;
+  }
+
   .canvas-area.background-checker {
     background-color: #171c27;
     background-image: conic-gradient(#222a38 25%, #171c27 0 50%, #222a38 0 75%, #171c27 0);
@@ -285,6 +336,12 @@
     padding: 0.5rem 0.15rem 0;
     font: 0.72rem/1.3 var(--mono);
     color: var(--muted);
+  }
+
+  .preview-toolbar:focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 3px;
+    border-radius: 8px;
   }
 
   .toolbar-row {
@@ -433,17 +490,31 @@
       padding-top: 0.25rem;
       overflow-x: auto;
       flex-wrap: nowrap;
-      scrollbar-width: none;
+      overscroll-behavior-x: contain;
+      scrollbar-width: thin;
+      scrollbar-color: var(--primary) var(--surface-2);
+      scroll-snap-type: x proximity;
     }
 
     .preview-toolbar::-webkit-scrollbar {
-      display: none;
+      height: 4px;
+    }
+
+    .preview-toolbar::-webkit-scrollbar-track {
+      border-radius: 4px;
+      background: var(--surface-2);
+    }
+
+    .preview-toolbar::-webkit-scrollbar-thumb {
+      border-radius: 4px;
+      background: var(--primary);
     }
 
     .toolbar-row {
       flex: 0 0 auto;
       flex-wrap: nowrap;
       gap: 0.45rem;
+      scroll-snap-align: start;
     }
 
     .toolbar-group {
@@ -461,6 +532,7 @@
 
     .background-control {
       flex: 0 0 auto;
+      scroll-snap-align: start;
     }
   }
 </style>

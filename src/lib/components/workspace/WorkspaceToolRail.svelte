@@ -10,9 +10,10 @@
   interface Props {
     active?: WorkspaceSection;
     onSelect?: (section: WorkspaceSection) => void;
+    variant?: 'all' | 'desktop' | 'mobile';
   }
 
-  let { active = 'halftone', onSelect }: Props = $props();
+  let { active = 'halftone', onSelect, variant = 'all' }: Props = $props();
 
   const desktopItems: Array<{ id: WorkspaceSection; label: string; disabled?: boolean }> = [
     { id: 'imagen', label: 'Imagen' },
@@ -26,6 +27,7 @@
   const mobileItems = desktopItems.filter((item) => item.id !== 'capas');
 </script>
 
+{#if variant !== 'mobile'}
 <nav class="tool-rail desktop-nav" aria-label="Secciones del editor">
   <span class="rail-caption">WORKSPACE</span>
   {#each desktopItems as item}
@@ -73,7 +75,9 @@
     </button>
   {/each}
 </nav>
+{/if}
 
+{#if variant !== 'desktop'}
 <nav class="mobile-nav" aria-label="Navegación móvil del editor">
   {#each mobileItems as item}
     <button
@@ -105,6 +109,7 @@
     </button>
   {/each}
 </nav>
+{/if}
 
 <style>
   .tool-rail {
@@ -209,19 +214,17 @@
     }
 
     .mobile-nav {
-      position: fixed;
-      right: 0;
-      bottom: 0;
-      left: 0;
-      z-index: 40;
+      position: relative;
+      z-index: auto;
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 0.15rem;
-      min-height: 72px;
+      width: 100%;
+      min-height: calc(72px + env(safe-area-inset-bottom));
       padding: 0.35rem max(0.35rem, env(safe-area-inset-left)) calc(0.35rem + env(safe-area-inset-bottom));
       border-top: 1px solid var(--border);
       background: color-mix(in srgb, var(--surface) 96%, transparent);
-      box-shadow: 0 -8px 30px rgb(0 0 0 / 26%);
+      box-shadow: none;
       backdrop-filter: blur(16px);
     }
 

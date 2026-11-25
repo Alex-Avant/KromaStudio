@@ -32,6 +32,10 @@
 </script>
 
 <footer class="status-bar" aria-label="Estado del documento">
+  <span class="item document-item" title={doc.selectedName}>
+    <span class="key">Documento</span>
+    <span class="document-name">{doc.selectedName}</span>
+  </span>
   <span class="item"><span class="key">Dim</span>{dimensions}</span>
   <span class="item"><span class="key">Físico</span>{physical}</span>
   <span class="item"><span class="key">DPI</span>{editor.dpi}</span>
@@ -40,7 +44,7 @@
   <span class="item"><span class="key">Trama</span>{editor.polarity === 'light' ? 'Luces' : 'Sombras'}</span>
   <span class="spacer"></span>
   {#if exporter.lastExportTiming}
-    <span class="item"><span class="key">Export</span>{Math.round(exporter.lastExportTiming.ms)} ms</span>
+    <span class="item export-timing"><span class="key">Export</span>{Math.round(exporter.lastExportTiming.ms)} ms</span>
   {/if}
   <span class="item state" class:ready={doc.exportReady}>{state}</span>
 </footer>
@@ -58,6 +62,10 @@
     scrollbar-width: none;
   }
 
+  .document-item {
+    display: none;
+  }
+
   .status-bar::-webkit-scrollbar {
     display: none;
   }
@@ -66,6 +74,14 @@
     display: inline-flex;
     align-items: baseline;
     gap: 0.3rem;
+    white-space: nowrap;
+  }
+
+  .document-name {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text);
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
@@ -88,10 +104,47 @@
     color: var(--success);
   }
 
-  @media (max-width: 520px) {
+  @media (max-width: 880px) {
     .status-bar {
-      gap: 0.65rem;
-      font-size: 0.64rem;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      align-items: center;
+      gap: 0.4rem 0.6rem;
+      padding: 0.45rem 0.1rem 0.2rem;
+      overflow: visible;
+      font-size: 0.68rem;
+    }
+
+    .document-item {
+      display: flex;
+      grid-column: span 2;
+    }
+
+    .item {
+      min-width: 0;
+      flex-wrap: wrap;
+      gap: 0.18rem 0.3rem;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .key {
+      font-size: 0.59rem;
+    }
+
+    .spacer {
+      display: none;
+    }
+
+    .state {
+      grid-column: 3;
+      grid-row: 1;
+      justify-self: end;
+      white-space: nowrap;
+    }
+
+    .export-timing {
+      grid-column: 1 / -1;
     }
   }
 </style>

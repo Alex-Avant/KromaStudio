@@ -197,71 +197,78 @@
 
   @media (max-width: 640px) {
     .app-header {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 0.35rem 0.55rem;
-      min-height: 0;
-      padding: 0.55rem 0.65rem 0.5rem;
+      display: flex;
+      gap: 0.4rem;
+      min-height: 54px;
+      padding: max(0.35rem, env(safe-area-inset-top, 0px))
+        max(0.55rem, env(safe-area-inset-right, 0px))
+        0.35rem
+        max(0.55rem, env(safe-area-inset-left, 0px));
     }
 
     .brand {
       min-width: 0;
-      gap: 0.5rem;
+      flex: 1 1 auto;
+      gap: 0.4rem;
     }
 
     .mark {
-      width: 35px;
-      height: 35px;
-      flex-basis: 35px;
-      border-radius: 9px;
+      width: 31px;
+      height: 31px;
+      flex-basis: 31px;
+      border-radius: 8px;
     }
 
     .mark svg {
-      width: 23px;
-      height: 23px;
+      width: 21px;
+      height: 21px;
     }
 
     .brand-name {
-      font-size: 0.84rem;
+      font-size: 0.78rem;
+      white-space: nowrap;
     }
 
     .brand-sub {
-      font-size: 0.5rem;
+      display: none;
     }
 
     .document {
-      grid-column: 1 / -1;
-      gap: 0.4rem;
-      padding-left: 0.1rem;
-      font-size: 0.68rem;
-    }
-
-    .document-label {
-      font-size: 0.54rem;
+      display: none;
     }
 
     .actions {
+      flex: 0 0 auto;
       gap: 0.35rem;
     }
 
     .actions button {
       min-height: 44px;
-      gap: 0.32rem;
-      padding: 0.45rem 0.55rem;
-      font-size: 0.69rem;
+      gap: 0.3rem;
+      padding: 0.35rem 0.42rem;
+      font-size: 0.67rem;
     }
 
     .actions svg {
-      width: 15px;
-      height: 15px;
+      width: 14px;
+      height: 14px;
     }
   }
 
-  @media (max-width: 360px) {
+  @media (max-width: 375px) {
     .actions button {
-      gap: 0.2rem;
-      padding-inline: 0.42rem;
-      font-size: 0.65rem;
+      gap: 0.25rem;
+      padding-inline: 0.3rem;
+      font-size: 0.62rem;
+    }
+
+    .actions svg {
+      width: 12px;
+      height: 12px;
+    }
+
+    .brand-name {
+      font-size: 0.74rem;
     }
   }
 </style>
