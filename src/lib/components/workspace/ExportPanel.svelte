@@ -1,5 +1,7 @@
 <script lang="ts">
   import { buildPreflightWarnings, preflightSummary } from '../../utils/preflight';
+  import { clampNumberInput, rangeProgressPercent } from '../../utils/inputs';
+  import { HALFTONE_DEFAULTS } from '../../utils/settings';
   import type { DocumentState } from '../../state/document.svelte';
   import type { EditorState } from '../../state/editor.svelte';
   import type { ExportState } from '../../state/export.svelte';
@@ -49,6 +51,36 @@
 <div class="panel">
   <details class="group" id="panel-exportacion" open>
     <summary class="group-title">Exportación <span class="chevron" aria-hidden="true"></span></summary>
+
+    <div class="field">
+      <div class="field-head">
+        <label for="output-dpi-range">DPI de salida</label>
+        <input
+          id="output-dpi-number"
+          class="number-input"
+          type="number"
+          min="72"
+          max="600"
+          step="1"
+          bind:value={editor.dpi}
+          onchange={(event) =>
+            clampNumberInput(event, (value) => (editor.dpi = value), 72, 600, HALFTONE_DEFAULTS.dpi)}
+          aria-label="DPI de salida exactos"
+        />
+      </div>
+      <input
+        id="output-dpi-range"
+        class="range-control"
+        type="range"
+        min="72"
+        max="600"
+        step="1"
+        bind:value={editor.dpi}
+        aria-valuetext={`${editor.dpi} DPI`}
+        style={`--range-progress: ${rangeProgressPercent(editor.dpi, 72, 600)}%;`}
+      />
+      <p class="hint">Resolución configurada para las separaciones PNG.</p>
+    </div>
 
     <p class="summary">{exportSummary}</p>
 
@@ -205,6 +237,45 @@
     font: 0.71rem/1.5 var(--mono);
   }
 
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .field-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+    min-height: 38px;
+  }
+
+  .field-head label {
+    color: var(--text-2);
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
+
+  .number-input {
+    width: 5.2rem;
+    min-height: 42px;
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    font: 0.85rem/1.2 var(--mono);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color-scheme: dark;
+  }
+
+  .number-input:focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 2px;
+  }
+
   .preflight { display: flex; flex-direction: column; gap: 0.4rem; }
   .preflight-summary { margin: 0; color: var(--text-2); font: 0.71rem/1.5 var(--mono); }
 
@@ -261,5 +332,6 @@
 
   @media (max-width: 880px) {
     .panel { margin-top: 0.5rem; }
+    .number-input { min-height: 48px; }
   }
 </style>

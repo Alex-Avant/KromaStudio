@@ -32,3 +32,9 @@ export function handlePercentInput(
   if (value === null) return;
   apply(Math.min(max, Math.max(min, value / 100)));
 }
+
+/** Porcentaje visible del relleno de un slider dentro de sus límites. */
+export function rangeProgressPercent(value: number, min: number, max: number): number {
+  if (![value, min, max].every(Number.isFinite) || max <= min) return 0;
+  return Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
+}

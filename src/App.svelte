@@ -41,7 +41,6 @@
     imagen: 'panel-imagen',
     ajustes: 'panel-tonal',
     halftone: 'panel-trama',
-    capas: null,
     separaciones: 'panel-separaciones',
     exportacion: 'panel-exportacion',
   };
@@ -53,14 +52,12 @@
       imagen: 'Imagen',
       ajustes: 'Ajustes',
       halftone: 'Halftone',
-      capas: 'Capas',
       separaciones: 'Separaciones',
       exportacion: 'Exportar',
     })[activeSection],
   );
 
   function focusSection(section: WorkspaceSection, forceExpanded = false): void {
-    if (section === 'capas') return;
     const mobile = window.matchMedia('(max-width: 880px)').matches;
     const isCurrentSection = activeSection === section;
 
@@ -135,7 +132,7 @@
 </script>
 
 <svelte:head>
-  <title>KromaStudio — Workspace de semitono DTF</title>
+  <title>KromaStudio — Preparación gráfica DTF</title>
   <meta
     name="description"
     content="Editor local-first de semitonos AM y underbase para impresión DTF."

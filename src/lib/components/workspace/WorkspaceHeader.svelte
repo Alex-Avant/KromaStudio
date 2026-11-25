@@ -10,18 +10,14 @@
 </script>
 
 <header class="app-header">
-  <div class="brand" aria-label="KromaStudio, editor DTF">
-    <span class="mark" aria-hidden="true">
-      <svg viewBox="0 0 32 32" fill="none">
-        <circle cx="9" cy="9" r="2" /><circle cx="16" cy="9" r="2" /><circle cx="23" cy="9" r="2" />
-        <circle cx="9" cy="16" r="2" /><circle cx="16" cy="16" r="2" /><circle cx="23" cy="16" r="2" />
-        <circle cx="9" cy="23" r="2" /><circle cx="16" cy="23" r="2" /><circle cx="23" cy="23" r="2" />
-      </svg>
-    </span>
-    <span class="brand-text">
-      <span class="brand-name">KromaStudio</span>
-      <span class="brand-sub">DTF · HALFTONE LAB</span>
-    </span>
+  <div class="brand">
+    <img
+      class="brand-logo"
+      src="/kromastudio-logo.svg"
+      alt="KromaStudio · DTF AM Screen Lab"
+      width="420"
+      height="96"
+    />
   </div>
 
   <p class="document" title={doc.selectedName}>
@@ -56,45 +52,15 @@
   .brand {
     display: flex;
     align-items: center;
-    gap: 0.7rem;
-    min-width: 185px;
+    min-width: 190px;
+    flex: 0 0 auto;
   }
 
-  .mark {
-    display: grid;
-    place-items: center;
-    width: 40px;
-    height: 40px;
-    flex: 0 0 40px;
-    border: 1px solid color-mix(in srgb, var(--primary) 48%, var(--border));
-    border-radius: 11px;
-    background: color-mix(in srgb, var(--primary) 16%, var(--surface-2));
-    color: var(--primary-text);
-  }
-
-  .mark svg {
-    width: 26px;
-    height: 26px;
-    fill: currentColor;
-  }
-
-  .brand-text {
-    display: grid;
-    gap: 0.2rem;
-    line-height: 1.15;
-  }
-
-  .brand-name {
-    color: var(--text);
-    font-size: 0.92rem;
-    font-weight: 700;
-    letter-spacing: -0.025em;
-  }
-
-  .brand-sub {
-    color: var(--cyan);
-    font: 600 0.56rem/1.2 var(--mono);
-    letter-spacing: 0.11em;
+  .brand-logo {
+    display: block;
+    width: 188px;
+    max-width: 100%;
+    height: auto;
   }
 
   .document {
@@ -209,29 +175,9 @@
     .brand {
       min-width: 0;
       flex: 1 1 auto;
-      gap: 0.4rem;
     }
 
-    .mark {
-      width: 31px;
-      height: 31px;
-      flex-basis: 31px;
-      border-radius: 8px;
-    }
-
-    .mark svg {
-      width: 21px;
-      height: 21px;
-    }
-
-    .brand-name {
-      font-size: 0.78rem;
-      white-space: nowrap;
-    }
-
-    .brand-sub {
-      display: none;
-    }
+    .brand-logo { width: clamp(112px, 35vw, 138px); }
 
     .document {
       display: none;
@@ -267,8 +213,6 @@
       height: 12px;
     }
 
-    .brand-name {
-      font-size: 0.74rem;
-    }
+    .brand-logo { width: clamp(100px, 32vw, 116px); }
   }
 </style>

@@ -3,7 +3,6 @@
     | 'imagen'
     | 'ajustes'
     | 'halftone'
-    | 'capas'
     | 'separaciones'
     | 'exportacion';
 
@@ -19,12 +18,11 @@
     { id: 'imagen', label: 'Imagen' },
     { id: 'ajustes', label: 'Ajustes' },
     { id: 'halftone', label: 'Halftone' },
-    { id: 'capas', label: 'Capas', disabled: true },
     { id: 'separaciones', label: 'Separaciones' },
     { id: 'exportacion', label: 'Exportar' },
   ];
 
-  const mobileItems = desktopItems.filter((item) => item.id !== 'capas');
+  const mobileItems = desktopItems;
 </script>
 
 {#if variant !== 'mobile'}
@@ -34,8 +32,6 @@
     <button
       type="button"
       class:active={active === item.id}
-      disabled={item.disabled}
-      title={item.disabled ? `${item.label}: próximamente` : item.label}
       aria-current={active === item.id ? 'page' : undefined}
       onclick={() => onSelect?.(item.id)}
     >
@@ -58,9 +54,6 @@
           <circle cx="6" cy="18" r="1.4" />
           <circle cx="12" cy="18" r="1.4" />
           <circle cx="18" cy="18" r="1.4" />
-        {:else if item.id === 'capas'}
-          <path d="m12 3 8 4-8 4-8-4 8-4Z" />
-          <path d="m4 12 8 4 8-4M4 17l8 4 8-4" />
         {:else if item.id === 'separaciones'}
           <rect x="4" y="4" width="12" height="12" rx="2" />
           <path d="M8 20h9a3 3 0 0 0 3-3V8" />
@@ -71,7 +64,6 @@
         {/if}
       </svg>
       <span class="label">{item.label}</span>
-      {#if item.disabled}<span class="soon">Próximamente</span>{/if}
     </button>
   {/each}
 </nav>
@@ -170,11 +162,6 @@
     content: '';
   }
 
-  .tool-rail button:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
   .tool-rail button:focus-visible,
   .mobile-nav button:focus-visible {
     outline: 2px solid var(--cyan);
@@ -195,13 +182,6 @@
     font: 600 0.59rem/1.15 var(--mono);
     text-align: center;
     overflow-wrap: anywhere;
-  }
-
-  .soon {
-    color: var(--muted);
-    font-size: 0.52rem;
-    line-height: 1;
-    text-align: center;
   }
 
   .mobile-nav {
