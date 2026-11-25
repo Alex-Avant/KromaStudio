@@ -1,4 +1,8 @@
-import type { HalftoneDotShape, HalftonePolarity } from './lib/types/halftone';
+import type {
+  HalftoneApplicationMode,
+  HalftoneDotShape,
+  HalftonePolarity,
+} from './lib/types/halftone';
 import type { HalftoneExportOptions } from './lib/utils/export';
 import {
   exportHalftoneLayers,
@@ -9,6 +13,7 @@ import { estimatePeriod } from './lib/utils/qa-analysis';
 import {
   QA_ALPHA_RAMP,
   QA_MIDTONE,
+  QA_NEAR_SOLID,
   QA_POLARITY_BLOCKS,
   QA_TONE_LADDER,
   QA_TONE_VALUES,
@@ -58,23 +63,31 @@ function optionsFor(
   lpi = 30,
   dpi = 300,
   angle = 45,
+  applicationMode: HalftoneApplicationMode = 'full',
 ): HalftoneExportOptions {
   return {
     lpi,
     angle,
-    contrast: 1,
+    brightness: 0,
+    contrast: 0,
     gamma: 1,
-    minDot: 0.005,
-    shadowPoint: 1,
+    minDot: 0.01,
+    maxDot: 1,
+    solidThreshold: 0.98,
+    solidEnabled: false,
+    edgeSmooth: true,
+    edgeProtect: false,
+    applicationMode,
     dotShape,
     dpi,
     underbase,
     choke: 0,
+    spread: 0,
     underbaseStyle: 'dot',
     colorMode: 'color',
     polarity,
     blackPoint: 0,
-    whitePoint: 1,
+    whitePoint: 255,
     shirtColor: '#000000',
   };
 }
@@ -292,6 +305,88 @@ async function runQa(): Promise<QaReport> {
     } finally {
       bitmap.close();
     }
+  }
+
+  const nearSolidBitmap = await createFixtureBitmap(QA_NEAR_SOLID);
+  try {
+    const fades = await exportHalftonePng(
+      nearSolidBitmap,
+      optionsFor('light', false, 'circle', 35, 300, 22.5, 'fades'),
+      'color',
+      nearSolidBitmap,
+    );
+    const full = await exportHalftonePng(
+      nearSolidBitmap,
+      optionsFor('light', false, 'circle', 35, 300, 22.5, 'full'),
+      'color',
+      nearSolidBitmap,
+    );
+    const fadesMean = regionMean(await readAlpha(fades.blob), 0, QA_NEAR_SOLID.width);
+    const fullMean = regionMean(await readAlpha(full.blob), 0, QA_NEAR_SOLID.width);
+    add(
+      'Fades Only conserva el casi sólido; Full Halftone lo tramá',
+      fadesMean > fullMean + 0.003 && fadesMean > 0.995,
+      `Fades ${format(fadesMean)} · Full ${format(fullMean)}`,
+    );
+  } finally {
+    nearSolidBitmap.close();
+  }
+
+  const knockoutBitmap = await createFixtureBitmap(QA_MIDTONE);
+  try {
+    const knockout = await exportHalftonePng(
+      knockoutBitmap,
+      optionsFor('light', false, 'circle', 35, 300, 22.5, 'knockout'),
+      'color',
+      knockoutBitmap,
+    );
+    const image = await readAlpha(knockout.blob);
+    const mean = regionMean(image, 0, image.width);
+    const ppi = await readPpi(knockout.blob);
+    add(
+      'Knockout Shirt perfora el alfa de medios tonos',
+      mean < 0.1 && ppi?.x === Math.round(300 / 0.0254),
+      `alfa medio ${format(mean)} · pHYs ${ppi?.x ?? 'ausente'}`,
+    );
+  } finally {
+    knockoutBitmap.close();
+  }
+
+  const resizeBitmap = await createFixtureBitmap(QA_TONE_LADDER);
+  try {
+    const resized = await exportHalftonePng(
+      resizeBitmap,
+      optionsFor('light', false, 'circle', 35, 300, 22.5, 'full'),
+      'color',
+      resizeBitmap,
+      { widthIn: 2, heightIn: 0.5 },
+    );
+    const image = await readAlpha(resized.blob);
+    const ppi = await readPpi(resized.blob);
+    add(
+      'Tamaño físico remuestrea dimensiones exportadas',
+      image.width === 600 && image.height === 150 && ppi?.x === Math.round(300 / 0.0254),
+      `${image.width}×${image.height} px · objetivo 600×150 px · pHYs ${ppi?.x ?? 'ausente'}`,
+    );
+  } finally {
+    resizeBitmap.close();
+  }
+
+  const mirrorBitmap = await createFixtureBitmap(QA_POLARITY_BLOCKS);
+  try {
+    const mirrored = await exportHalftonePng(
+      mirrorBitmap,
+      optionsFor('light', false, 'circle', 35, 300, 22.5, 'full'),
+      'color',
+      mirrorBitmap,
+      { mirror: true },
+    );
+    const image = await readAlpha(mirrored.blob);
+    const left = regionMean(image, 0, image.width / 2);
+    const right = regionMean(image, image.width / 2, image.width / 2);
+    add('Espejo horizontal voltea color y alfa reales', left < 0.05 && right > 0.9, `izquierda ${format(left)} · derecha ${format(right)}`);
+  } finally {
+    mirrorBitmap.close();
   }
 
   for (const lpi of [25, 35, 45]) {

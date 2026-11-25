@@ -1,3 +1,9 @@
+import {
+  HALFTONE_PARAMETER_REGISTRY,
+  validateNumericParameter,
+  type NumericParameterId,
+} from './parameter-registry';
+
 /** Utilidades compartidas por los campos numéricos del inspector. */
 
 function inputValue(event: Event): number | null {
@@ -37,4 +43,21 @@ export function handlePercentInput(
 export function rangeProgressPercent(value: number, min: number, max: number): number {
   if (![value, min, max].every(Number.isFinite) || max <= min) return 0;
   return Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
+}
+
+/** Lee un número mostrado en unidades de UI y lo valida con el registro central. */
+export function clampRegisteredInput(
+  event: Event,
+  apply: (value: number) => void,
+  id: NumericParameterId,
+  minOverride?: number,
+  maxOverride?: number,
+): void {
+  const input = event.currentTarget as HTMLInputElement;
+  const displayValue = Number(input.value);
+  const definition = HALFTONE_PARAMETER_REGISTRY[id];
+  let internalValue = validateNumericParameter(id, displayValue / definition.displayScale);
+  if (minOverride !== undefined) internalValue = Math.max(minOverride, internalValue);
+  if (maxOverride !== undefined) internalValue = Math.min(maxOverride, internalValue);
+  apply(internalValue);
 }

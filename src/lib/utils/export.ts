@@ -1,10 +1,12 @@
 import shaderCode from '../shaders/halftone.wgsl?raw';
 import type {
+  HalftoneApplicationMode,
   HalftoneColorMode,
   HalftoneDotShape,
   HalftoneExportKind,
   HalftoneExportResult,
   HalftoneImageSource,
+  HalftoneOutputGeometry,
   HalftonePolarity,
   HalftoneUnderbaseStyle,
   SvaderParameter,
@@ -16,20 +18,59 @@ import { addPngDpi } from './png';
 export interface HalftoneExportOptions {
   lpi: number;
   angle: number;
+  brightness: number;
   contrast: number;
   gamma: number;
   minDot: number;
-  shadowPoint: number;
+  maxDot: number;
+  solidThreshold: number;
+  solidEnabled: boolean;
+  edgeSmooth: boolean;
+  edgeProtect: boolean;
+  applicationMode: HalftoneApplicationMode;
   dotShape: HalftoneDotShape;
   dpi: number;
   underbase: boolean;
   choke: number;
+  spread: number;
   underbaseStyle: HalftoneUnderbaseStyle;
   colorMode: HalftoneColorMode;
   polarity: HalftonePolarity;
   blackPoint: number;
   whitePoint: number;
   shirtColor: string;
+}
+
+export interface OutputPixelDimensions {
+  width: number;
+  height: number;
+  widthIn: number;
+  heightIn: number;
+}
+
+/** Convierte la geometría física solicitada a píxeles enteros reales. */
+export function outputPixelDimensions(
+  sourceWidth: number,
+  sourceHeight: number,
+  dpi: number,
+  geometry?: HalftoneOutputGeometry,
+): OutputPixelDimensions {
+  const safeDpi = Math.max(1, dpi);
+  const sourceAspect = Math.max(1, sourceWidth) / Math.max(1, sourceHeight);
+  const widthIn = geometry?.widthIn && Number.isFinite(geometry.widthIn) && geometry.widthIn > 0
+    ? geometry.widthIn
+    : Math.max(1, sourceWidth) / safeDpi;
+  const heightIn = geometry?.heightIn && Number.isFinite(geometry.heightIn) && geometry.heightIn > 0
+    ? geometry.heightIn
+    : geometry?.widthIn && geometry.keepAspect !== false
+      ? widthIn / sourceAspect
+      : Math.max(1, sourceHeight) / safeDpi;
+  const width = Math.max(1, Math.round(widthIn * safeDpi));
+  const height = Math.max(1, Math.round(heightIn * safeDpi));
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height)) {
+    throw new Error('Las dimensiones físicas exceden el rango exportable.');
+  }
+  return { width, height, widthIn, heightIn };
 }
 
 // TypeScript DOM incluye los tipos WebGPU pero no los valores globales de
@@ -78,18 +119,25 @@ export function exportFilename(
     `LPI${Math.round(options.lpi)}`,
     `ANG${formatValue(options.angle)}`,
     dpiLabel,
+    `BR${formatValue(options.brightness)}`,
     `C${formatValue(options.contrast)}`,
     `G${formatValue(options.gamma)}`,
     `MD${formatPercent(options.minDot, 1)}`,
-    `SH${formatPercent(options.shadowPoint)}`,
-    `BP${formatPercent(options.blackPoint)}`,
-    `WP${formatPercent(options.whitePoint)}`,
+    `XD${formatPercent(options.maxDot)}`,
+    `BP${Math.round(options.blackPoint)}`,
+    `WP${Math.round(options.whitePoint)}`,
+    `MODE${options.applicationMode}`,
   ];
+
+  if (metrics?.physicalWidthIn !== undefined && metrics.physicalHeightIn !== undefined) {
+    parts.push(`SIZE${formatValue(metrics.physicalWidthIn)}x${formatValue(metrics.physicalHeightIn)}in`);
+  }
 
   // El choke y el tipo de base solo afectan a blanco y composite.
   if (kind !== 'color' && options.underbase) {
     parts.push(
       `CHK${formatValue(options.choke)}`,
+      `SPR${formatValue(options.spread)}`,
       options.underbaseStyle === 'solid' ? 'solid' : 'dot',
     );
   }
@@ -126,6 +174,8 @@ export interface ExportMetrics {
   effectiveDpi: number;
   exportScale: number;
   exportPitch: number;
+  physicalWidthIn?: number;
+  physicalHeightIn?: number;
   downscaled: boolean;
 }
 
@@ -150,6 +200,8 @@ export function exportMetricsFor(
     effectiveDpi: safeDpi * exportScale,
     exportScale,
     exportPitch: (safeDpi / safeLpi) * exportScale,
+    physicalWidthIn: image.logicalWidth / safeDpi,
+    physicalHeightIn: image.logicalHeight / safeDpi,
     downscaled: exportScale < 0.999999,
   };
 }
@@ -227,6 +279,7 @@ async function renderExport(
   image: ReturnType<typeof bitmapToPackedRgba>,
   options: HalftoneExportOptions,
   kinds: readonly HalftoneExportKind[],
+  mirror: boolean,
 ): Promise<HalftoneExportResults> {
   const width = image.width;
   const height = image.height;
@@ -302,18 +355,26 @@ async function renderExport(
     lpi: options.lpi,
     angle: options.angle,
     contrast: options.contrast,
+    brightness: options.brightness,
     gamma: options.gamma,
     minDot: options.minDot,
-    shadowPoint: options.shadowPoint,
+    maxDot: options.maxDot,
+    solidThreshold: options.solidThreshold,
+    solidEnabled: options.solidEnabled,
+    edgeSmooth: options.edgeSmooth,
+    edgeProtect: options.edgeProtect,
+    applicationMode: options.applicationMode,
     dotShape: options.dotShape,
     dpi: options.dpi,
     underbase: options.underbase,
     choke: options.choke,
+    spread: options.spread,
     underbaseStyle: options.underbaseStyle,
     colorMode: options.colorMode,
     polarity: options.polarity,
     blackPoint: options.blackPoint,
     whitePoint: options.whitePoint,
+    mirror,
   };
 
   const buffers: GPUBuffer[] = [vertexBuffer];
@@ -448,6 +509,7 @@ export async function exportHalftoneLayers(
   options: HalftoneExportOptions,
   kinds: readonly HalftoneExportKind[],
   preferredSource?: ImageBitmap,
+  geometry?: HalftoneOutputGeometry,
 ): Promise<HalftoneExportResults> {
   if (kinds.length === 0) {
     throw new Error('No hay capas para exportar.');
@@ -485,8 +547,17 @@ export async function exportHalftoneLayers(
       : await loadImage(source);
 
     try {
-      const image = bitmapToPackedRgba(loaded.bitmap, maxDimension);
-      const results = await renderExport(device, image, options, kinds);
+      const output = outputPixelDimensions(
+        loaded.bitmap.width,
+        loaded.bitmap.height,
+        options.dpi,
+        geometry,
+      );
+      const image = bitmapToPackedRgba(loaded.bitmap, maxDimension, {
+        logicalWidth: output.width,
+        logicalHeight: output.height,
+      });
+      const results = await renderExport(device, image, options, kinds, geometry?.mirror ?? false);
       const durationMs = performance.now() - startedAt;
       for (const result of Object.values(results)) {
         if (result) result.durationMs = durationMs;
@@ -505,8 +576,9 @@ export async function exportHalftonePng(
   options: HalftoneExportOptions,
   kind: HalftoneExportKind,
   preferredSource?: ImageBitmap,
+  geometry?: HalftoneOutputGeometry,
 ): Promise<HalftoneExportResult> {
-  const results = await exportHalftoneLayers(source, options, [kind], preferredSource);
+  const results = await exportHalftoneLayers(source, options, [kind], preferredSource, geometry);
   const result = results[kind];
   if (!result) {
     throw new Error('No se pudo generar la capa solicitada.');

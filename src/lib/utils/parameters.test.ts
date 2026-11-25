@@ -15,21 +15,28 @@ function values(overrides: Partial<HalftoneParameterValues> = {}): HalftoneParam
     outputWidth: 8,
     outputHeight: 8,
     pixels: new Uint32Array(64),
-    lpi: 45,
-    angle: 45,
-    contrast: 1,
+    lpi: 35,
+    angle: 22.5,
+    brightness: 0,
+    contrast: 0,
     gamma: 1,
-    minDot: 0.01,
-    shadowPoint: 0.97,
+    minDot: 0.08,
+    maxDot: 1,
+    solidThreshold: 0.98,
+    solidEnabled: false,
+    edgeSmooth: true,
+    edgeProtect: true,
+    applicationMode: 'fades',
     dotShape: 'circle',
     dpi: 300,
     underbase: true,
     choke: 1,
+    spread: 0,
     underbaseStyle: 'dot',
     colorMode: 'color',
     polarity: 'light',
     blackPoint: 0,
-    whitePoint: 1,
+    whitePoint: 255,
     ...overrides,
   };
 }
@@ -58,20 +65,27 @@ describe('halftone parameters', () => {
     expect(uintBinding(buildHalftoneParameters(parameters, MASK_MODE), 6)).toEqual([2]);
   });
 
-  it('packs light/dot flags as 0 and dark/solid as 3', () => {
-    expect(binding(buildHalftoneParameters(values(), COLOR_MODE), 12)[3]).toBe(0);
+  it('packs style, polarity, quality toggles and application mode in uniform flags', () => {
+    expect(binding(buildHalftoneParameters(values(), COLOR_MODE), 12)[3]).toBe(12);
     expect(
       binding(
         buildHalftoneParameters(values({ polarity: 'dark', underbaseStyle: 'solid' }), COLOR_MODE),
         12,
       )[3],
-    ).toBe(3);
+      ).toBe(15);
     expect(
       binding(
         buildHalftoneParameters(values({ polarity: 'dark', underbaseStyle: 'dot' }), COLOR_MODE),
         12,
       )[3],
-    ).toBe(2);
+      ).toBe(14);
+    expect(
+      binding(buildHalftoneParameters(values({ applicationMode: 'knockout' }), COLOR_MODE), 12)[3],
+    ).toBe(44);
+    expect(
+      binding(buildHalftoneParameters(values({ applicationMode: 'full' }), COLOR_MODE), 12)[3],
+    ).toBe(76);
+    expect(binding(buildHalftoneParameters(values({ mirror: true }), COLOR_MODE), 12)[3]).toBe(140);
   });
 
   it('maps every dot shape to its shader id', () => {
@@ -88,9 +102,20 @@ describe('halftone parameters', () => {
     }
   });
 
-  it('keeps choke and solid-base limits valid', () => {
-    const parameters = buildHalftoneParameters(values({ choke: 9 }), COLOR_MODE);
-    expect(binding(parameters, 4)[0]).toBe(3);
+  it('packs choke, spread, max dot and solid threshold into one vec4', () => {
+    const parameters = buildHalftoneParameters(
+      values({ choke: 9, spread: 1.5, maxDot: 1, solidThreshold: 0.95 }),
+      COLOR_MODE,
+    );
+    expect(binding(parameters, 4).map((value) => Number(value.toFixed(3)))).toEqual([3, 1.5, 1, 0.95]);
+  });
+
+  it('packs brightness, additive contrast, gamma and min dot into tone vec4', () => {
+    const parameters = buildHalftoneParameters(
+      values({ brightness: -20, contrast: 30, gamma: 1.2, minDot: 0.08 }),
+      COLOR_MODE,
+    );
+    expect(binding(parameters, 3).map((value) => Number(value.toFixed(2)))).toEqual([-0.2, 30, 1.2, 0.08]);
   });
 
   it('returns no bindings for an empty image', () => {

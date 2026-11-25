@@ -24,8 +24,8 @@
 @group(0) @binding(0) var<uniform> u_resolution: vec2<f32>;
 @group(0) @binding(1) var<uniform> u_lpi: f32;
 @group(0) @binding(2) var<uniform> u_angle: f32;          // radianes
-@group(0) @binding(3) var<uniform> u_tone: vec4<f32>;     // contraste, gamma, mínimo, sólido
-@group(0) @binding(4) var<uniform> u_choke_px: f32;       // píxeles lógicos de salida
+@group(0) @binding(3) var<uniform> u_tone: vec4<f32>;     // brillo [-1,1], contraste [-100,100], gamma, mínimo
+@group(0) @binding(4) var<uniform> u_underbase: vec4<f32>; // choke, spread, max dot, umbral sólido
 @group(0) @binding(5) var<uniform> u_underbase_active: u32; // 0 | 1
 @group(0) @binding(6) var<uniform> u_mode: u32;           // 0 color, 1 underbase
 @group(0) @binding(7) var<uniform> u_image_metrics: vec4<f32>; // buffer xy, salida lógica zw
@@ -33,7 +33,7 @@
 @group(0) @binding(9) var<storage, read> u_pixels: array<u32>;
 @group(0) @binding(10) var<uniform> u_offset: vec2<f32>;
 @group(0) @binding(11) var<uniform> u_color_mode: u32;    // 0 color, 1 B&N
-@group(0) @binding(12) var<uniform> u_levels: vec4<f32>;  // negro, blanco, forma, base sólida
+@group(0) @binding(12) var<uniform> u_levels: vec4<f32>;  // negro, blanco, forma, flags
 
 const PI: f32 = 3.141592653589793;
 const LUMA_WEIGHTS: vec3<f32> = vec3<f32>(0.299, 0.587, 0.114);
@@ -182,28 +182,36 @@ fn screen_threshold(cell_local: vec2<f32>) -> f32 {
     return circle_cell_area(length(cell_local));
 }
 
-// Cobertura tonal de la fuente en este píxel, ya con niveles, contraste,
-// gamma y polaridad. El alfa fuente limita la cobertura; un píxel
-// transparente nunca produce tinta.
+// Flags de binding 12.w: bit0 base sólida, bit1 polaridad oscura,
+// bit2 antialias, bit3 protección de bordes, bit4 umbral sólido,
+// bits5-6 modo: 0 Fades Only, 1 Knockout Shirt, 2 Full Halftone;
+// bit7 espejo horizontal solo para la exportación.
+fn config_flags() -> u32 {
+    return u32(u_levels.w + 0.5);
+}
+
+fn application_mode() -> u32 {
+    return (config_flags() >> 5u) & 3u;
+}
+
+// Cobertura de la fuente tras brillo, contraste, niveles, polaridad y gamma.
+// Los niveles se remapean antes de invertir la polaridad, y el alfa original
+// sigue limitando la tinta.
 fn coverage_from_source(source: vec4<f32>) -> f32 {
     if (source.a <= 0.0) {
         return 0.0;
     }
 
-    let lum = luminance(source.rgb);
-    if (lum < u_levels.x) {
-        return 0.0;
-    }
+    let lum = clamp(luminance(source.rgb) + u_tone.x, 0.0, 1.0);
+    let contrast_factor = 1.0 + u_tone.y / 100.0;
+    let contrasted = clamp((lum - 0.5) * contrast_factor + 0.5, 0.0, 1.0);
+    let range = max(u_levels.y - u_levels.x, 1.0 / 255.0);
+    let normalized = clamp((contrasted - u_levels.x) / range, 0.0, 1.0);
 
-    let range = max(u_levels.y - u_levels.x, 0.0001);
-    let adjusted = clamp((lum - u_levels.x) / range, 0.0, 1.0);
-    let tone = clamp((adjusted - 0.5) * u_tone.x + 0.5, 0.0, 1.0);
-
-    // u_levels.w empaqueta flags: bit 0 = base sólida, bit 1 = polaridad
-    // oscura. El modo de color solo decide el RGB de salida, no la trama.
-    let dark_polarity = (u32(u_levels.w + 0.5) & 2u) != 0u;
-    let polarity = select(tone, 1.0 - tone, dark_polarity);
-    return clamp(pow(polarity * source.a, u_tone.y), 0.0, 1.0);
+    let dark_polarity = (config_flags() & 2u) != 0u;
+    let polarity = select(normalized, 1.0 - normalized, dark_polarity);
+    let tonal_coverage = pow(clamp(polarity, 0.0, 1.0), u_tone.z);
+    return min(tonal_coverage * source.a, u_underbase.z);
 }
 
 // Devuelve RGB recto del píxel y su máscara de tinta. La cobertura se evalúa
@@ -223,26 +231,53 @@ fn evaluate_ink(
     let uv = (canvas_pos - origin) / displayed;
     let source = sample_image(uv);
     let coverage = coverage_from_source(source);
-    if (coverage <= 0.0) {
-        return vec4<f32>(0.0);
-    }
-    if (coverage >= u_tone.w) {
-        return vec4<f32>(source.rgb, 1.0);
-    }
-
     let grid_pos = grid_position(canvas_pos, cell);
     let cell_local = fract(grid_pos) - vec2<f32>(0.5);
     let threshold = screen_threshold(cell_local);
-    let screen_mask = smoothstep(threshold - aa, threshold + aa, coverage);
+    let flags = config_flags();
+    let mode = application_mode();
+    let solid_enabled = (flags & 16u) != 0u;
+    let preserve_solid = source.a >= 0.999 && coverage >= u_underbase.w &&
+        (mode == 0u || solid_enabled);
 
-    // El punto mínimo funde los puntos más débiles en vez de cortarlos en seco.
-    let faded = screen_mask * smoothstep(u_tone.z * 0.5, u_tone.z, coverage);
+    if (mode == 0u && preserve_solid) {
+        return vec4<f32>(source.rgb, source.a);
+    }
 
-    // Si la trama no se puede resolver, el preview representa su cobertura
-    // media en vez de producir aliasing.
+    if (mode == 1u) {
+        // Knockout vintage: los extremos tonales conservan la imagen; los
+        // medios tonos perforan la prenda con una pantalla AM real en alfa.
+        let midtone_coverage = min(4.0 * coverage * (1.0 - coverage), u_underbase.z);
+        let holes = screen_coverage(midtone_coverage, threshold, aa, cell);
+        return vec4<f32>(source.rgb, source.a * (1.0 - holes));
+    }
+
+    let mask = screen_coverage(coverage, threshold, aa, cell);
+    return vec4<f32>(source.rgb, mask);
+}
+
+fn screen_coverage(coverage: f32, threshold: f32, aa: f32, cell: f32) -> f32 {
+    if (coverage <= 0.0) {
+        return 0.0;
+    }
+
+    var screen_mask: f32;
+    if ((config_flags() & 4u) != 0u) {
+        screen_mask = smoothstep(threshold - aa, threshold + aa, coverage);
+    } else {
+        screen_mask = select(0.0, 1.0, coverage >= threshold);
+    }
+
+    // Punto mínimo: funde de forma suave las coberturas inferiores.
+    let faded = screen_mask * smoothstep(u_tone.w * 0.5, u_tone.w, coverage);
     let resolved = smoothstep(0.5, 1.25, cell);
-    let mask = mix(coverage, faded, resolved);
-    return vec4<f32>(source.rgb, clamp(mask, 0.0, 1.0));
+
+    // Protección conserva la geometría calculada por píxel en celdas pequeñas,
+    // en lugar del fallback de cobertura media que puede engordar contornos.
+    if ((config_flags() & 8u) != 0u) {
+        return clamp(faded, 0.0, 1.0);
+    }
+    return clamp(mix(coverage, faded, resolved), 0.0, 1.0);
 }
 
 // Tinta fuente exacta en `canvas_pos`, sin trama: 1.0 si el píxel es
@@ -251,20 +286,11 @@ fn evaluate_ink(
 fn source_ink_at(
     canvas_pos: vec2<f32>,
     origin: vec2<f32>,
-    displayed: vec2<f32>
+    displayed: vec2<f32>,
+    cell: f32,
+    aa: f32
 ) -> f32 {
-    if (!inside_rect(canvas_pos, origin, displayed)) {
-        return 0.0;
-    }
-    let uv = (canvas_pos - origin) / displayed;
-    let source = sample_image(uv);
-    if (source.a < 0.5) {
-        return 0.0;
-    }
-    // La base sólida no debe cubrir zonas cuyo punto ya desapareció por el
-    // umbral mínimo de impresión.
-    let coverage = coverage_from_source(source);
-    return select(0.0, 1.0, coverage > 0.0 && coverage >= u_tone.z);
+    return evaluate_ink(canvas_pos, origin, displayed, cell, aa).a;
 }
 
 const CHOKE_OFFSETS: array<vec2<f32>, 8> = array<vec2<f32>, 8>(
@@ -281,8 +307,11 @@ const CHOKE_OFFSETS: array<vec2<f32>, 8> = array<vec2<f32>, 8>(
 @fragment
 fn main(@builtin(position) frag_coord: vec4<f32>) -> @location(0) vec4<f32> {
     // `u_offset` compensa el recorte virtual que svader aplica a canvas grandes.
-    let pos = frag_coord.xy + u_offset;
     let canvas_size = u_resolution;
+    var pos = frag_coord.xy + u_offset;
+    if ((config_flags() & 128u) != 0u) {
+        pos.x = canvas_size.x - pos.x;
+    }
     let logical_size = max(u_image_metrics.zw, vec2<f32>(1.0));
     let fit = min(canvas_size.x / logical_size.x, canvas_size.y / logical_size.y);
     let displayed = logical_size * fit;
@@ -309,30 +338,25 @@ fn main(@builtin(position) frag_coord: vec4<f32>) -> @location(0) vec4<f32> {
             return vec4<f32>(0.0);
         }
 
-        let choke_px = u_choke_px * fit;
+        let choke_px = abs(u_underbase.x - u_underbase.y) * fit;
         var white_alpha: f32;
 
-        if ((u32(u_levels.w + 0.5) & 1u) != 0u) {
-            // Base blanca sólida: tinta plana bajo el diseño, erosionada por el
-            // choke igual que la base tramada.
-            white_alpha = source_ink_at(pos, origin, displayed);
-            if (choke_px > 0.0 && white_alpha > 0.0) {
-                for (var i = 0u; i < 8u; i++) {
-                    white_alpha = min(white_alpha, source_ink_at(
-                        pos + CHOKE_OFFSETS[i] * choke_px, origin, displayed));
-                }
-            }
+        if ((config_flags() & 1u) != 0u) {
+            // La base sólida sigue la máscara visible del modo actual.
+            white_alpha = source_ink_at(pos, origin, displayed, cell, aa);
         } else {
-            if (ink.a <= 0.0) {
-                return vec4<f32>(0.0);
-            }
-
-            // Erosión de la misma máscara de puntos usada por la capa de color.
             white_alpha = ink.a;
-            if (choke_px > 0.0) {
-                for (var i = 0u; i < 8u; i++) {
-                    white_alpha = min(white_alpha, evaluate_ink(
-                        pos + CHOKE_OFFSETS[i] * choke_px, origin, displayed, cell, aa).a);
+        }
+
+        if (choke_px > 0.0 && white_alpha > 0.0) {
+            let erosion = u_underbase.x > u_underbase.y;
+            for (var i = 0u; i < 8u; i++) {
+                let neighbor = source_ink_at(
+                    pos + CHOKE_OFFSETS[i] * choke_px, origin, displayed, cell, aa);
+                if (erosion) {
+                    white_alpha = min(white_alpha, neighbor);
+                } else {
+                    white_alpha = max(white_alpha, neighbor);
                 }
             }
         }

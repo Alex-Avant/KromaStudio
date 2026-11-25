@@ -75,4 +75,11 @@ describe('preflight summary', () => {
     expect(summary).toContain('alfa 25.0 %');
     expect(summary).toContain('parcial 5.0 %');
   });
+
+  it('reports configured output pixels when physical dimensions differ from source', () => {
+    const summary = preflightSummary(stats({ width: 1200, height: 1600 }), 300, 4, 6);
+    expect(summary).toContain('Fuente 1200 × 1600 px');
+    expect(summary).toContain('Salida 1200 × 1800 px');
+    expect(summary).toContain('4.00 × 6.00 in');
+  });
 });

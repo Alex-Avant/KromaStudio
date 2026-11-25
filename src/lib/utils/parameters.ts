@@ -1,14 +1,22 @@
 import type {
+  HalftoneApplicationMode,
   HalftoneColorMode,
   HalftoneDotShape,
   HalftonePolarity,
   HalftoneUnderbaseStyle,
   SvaderParameter,
 } from '../types/halftone';
+import { validateNumericParameter } from './parameter-registry';
 
 export const COLOR_MODE = 0;
 export const UNDERBASE_MODE = 1;
 export const MASK_MODE = 2;
+
+export const APPLICATION_MODE_ID: Record<HalftoneApplicationMode, number> = {
+  fades: 0,
+  knockout: 1,
+  full: 2,
+};
 
 export interface HalftoneParameterValues {
   imageWidth: number;
@@ -18,24 +26,32 @@ export interface HalftoneParameterValues {
   pixels: Uint32Array<ArrayBuffer>;
   lpi: number;
   angle: number;
+  brightness: number;
   contrast: number;
   gamma: number;
   minDot: number;
-  shadowPoint: number;
+  maxDot: number;
+  solidThreshold: number;
+  solidEnabled: boolean;
+  edgeSmooth: boolean;
+  edgeProtect: boolean;
+  applicationMode: HalftoneApplicationMode;
   dotShape: HalftoneDotShape;
   dpi: number;
   underbase: boolean;
   choke: number;
+  spread: number;
   underbaseStyle: HalftoneUnderbaseStyle;
   colorMode: HalftoneColorMode;
   polarity: HalftonePolarity;
   blackPoint: number;
   whitePoint: number;
+  mirror?: boolean;
 }
 
 /**
- * Construye los parámetros del shader en el orden exacto de sus bindings.
- * Se usa tanto en el preview (svader) como en el exportador WebGPU.
+ * Uniform layout estable: conserva 12 uniforms en el fragment stage y empaqueta
+ * los parámetros nuevos dentro de vec4 existentes, sin crear bindings extra.
  */
 export function buildHalftoneParameters(
   input: HalftoneParameterValues,
@@ -45,80 +61,83 @@ export function buildHalftoneParameters(
     return [];
   }
 
-  const safeLpi = Math.max(1, input.lpi);
-  const safeDpi = Math.max(1, input.dpi);
-  const safeContrast = Math.max(0, input.contrast);
-  const safeGamma = Math.min(5, Math.max(0.1, input.gamma));
-  const safeShadow = Math.min(1, Math.max(0.5, input.shadowPoint));
-  const safeMinDot = Math.min(
-    0.49,
-    Math.max(0, input.minDot),
-    Math.max(0, safeShadow - 0.01),
+  const lpi = validateNumericParameter('lpi', input.lpi);
+  const dpi = validateNumericParameter('dpi', input.dpi);
+  const brightness = validateNumericParameter('brightness', input.brightness) / 100;
+  const contrast = validateNumericParameter('contrast', input.contrast);
+  const gamma = validateNumericParameter('gamma', input.gamma);
+  const maxDot = validateNumericParameter('maxDot', input.maxDot);
+  const minDot = Math.min(
+    validateNumericParameter('minDot', input.minDot),
+    maxDot,
   );
-  const safeChoke = Math.min(3, Math.max(0, input.choke));
-  const safeBlack = Math.min(0.9, Math.max(0, input.blackPoint));
-  const requestedWhite = Math.min(1, Math.max(0.1, input.whitePoint));
-  const safeWhite = Math.min(1, Math.max(requestedWhite, safeBlack + 0.01));
-  const safeOutputWidth = Math.max(1, input.outputWidth);
-  const safeOutputHeight = Math.max(1, input.outputHeight);
+  const solidThreshold = validateNumericParameter('solidThreshold', input.solidThreshold);
+  const choke = validateNumericParameter('choke', input.choke);
+  const spread = validateNumericParameter('spread', input.spread);
+  const blackPoint = Math.min(254, validateNumericParameter('blackPoint', input.blackPoint)) / 255;
+  const whitePoint = Math.min(
+    1,
+    Math.max(
+      blackPoint + 1 / 255,
+      validateNumericParameter('whitePoint', input.whitePoint) / 255,
+    ),
+  );
+  const outputWidth = Math.max(1, input.outputWidth);
+  const outputHeight = Math.max(1, input.outputHeight);
   const colorMode = input.colorMode === 'color' ? 0 : 1;
-  // Binding 12.w empaqueta flags: bit 0 = base sólida, bit 1 = polaridad
-  // oscura. Así no se añade un decimotercer uniform buffer.
-  const levelsFlags =
-    (input.underbaseStyle === 'solid' ? 1 : 0) + (input.polarity === 'dark' ? 2 : 0);
-  const dotShape =
-    input.dotShape === 'ellipse'
-      ? 1
-      : input.dotShape === 'diamond'
-        ? 2
-        : input.dotShape === 'square'
-          ? 3
-          : input.dotShape === 'line'
-            ? 4
-            : 0;
+  const underbaseSolid = input.underbaseStyle === 'solid';
+  const darkPolarity = input.polarity === 'dark';
+  const dotShape = input.dotShape === 'ellipse'
+    ? 1
+    : input.dotShape === 'diamond'
+      ? 2
+      : input.dotShape === 'square'
+        ? 3
+        : input.dotShape === 'line'
+          ? 4
+          : 0;
+
+  // Binding 12.w: bit0=base sólida, bit1=polaridad dark, bit2=AA,
+  // bit3=protección de bordes, bit4=umbral sólido; bits 5..6=modo;
+  // bit7=espejo horizontal (solo exportación).
+  const flags =
+    (underbaseSolid ? 1 : 0) |
+    (darkPolarity ? 2 : 0) |
+    (input.edgeSmooth ? 4 : 0) |
+    (input.edgeProtect ? 8 : 0) |
+    (input.solidEnabled ? 16 : 0) |
+    (APPLICATION_MODE_ID[input.applicationMode] << 5) |
+    (input.mirror ? 128 : 0);
 
   return [
     { label: 'Resolución', binding: 0, value: 'resolution' },
-    { label: 'LPI', binding: 1, value: new Float32Array([safeLpi]) },
+    { label: 'LPI', binding: 1, value: new Float32Array([lpi]) },
+    { label: 'Ángulo', binding: 2, value: new Float32Array([(input.angle * Math.PI) / 180]) },
     {
-      label: 'Ángulo',
-      binding: 2,
-      value: new Float32Array([(input.angle * Math.PI) / 180]),
-    },
-    {
-      label: 'Contraste, gamma y límites de punto',
+      label: 'Tono, brillo, contraste, gamma y punto mínimo',
       binding: 3,
-      value: new Float32Array([safeContrast, safeGamma, safeMinDot, safeShadow]),
+      value: new Float32Array([brightness, contrast, gamma, minDot]),
     },
-    { label: 'Choke', binding: 4, value: new Float32Array([safeChoke]) },
     {
-      label: 'Underbase activo',
-      binding: 5,
-      value: new Uint32Array([input.underbase ? 1 : 0]),
+      label: 'Choke, spread, punto máximo y umbral sólido',
+      binding: 4,
+      value: new Float32Array([choke, spread, maxDot, solidThreshold]),
     },
+    { label: 'Underbase activo', binding: 5, value: new Uint32Array([input.underbase ? 1 : 0]) },
     { label: 'Modo de pasada', binding: 6, value: new Uint32Array([mode]) },
     {
       label: 'Tamaño de buffer y salida lógica',
       binding: 7,
-      value: new Float32Array([
-        input.imageWidth,
-        input.imageHeight,
-        safeOutputWidth,
-        safeOutputHeight,
-      ]),
+      value: new Float32Array([input.imageWidth, input.imageHeight, outputWidth, outputHeight]),
     },
-    { label: 'DPI de salida', binding: 8, value: new Float32Array([safeDpi]) },
+    { label: 'DPI de salida', binding: 8, value: new Float32Array([dpi]) },
     { label: 'Píxeles RGBA', binding: 9, value: input.pixels, storage: true },
     { label: 'Offset', binding: 10, value: 'offset' },
+    { label: 'Modo de color', binding: 11, value: new Uint32Array([colorMode]) },
     {
-      label: 'Modo de color',
-      binding: 11,
-      value: new Uint32Array([colorMode]),
-    },
-    {
-      label: 'Niveles, forma de punto, base y polaridad',
+      label: 'Niveles, forma y flags empaquetados',
       binding: 12,
-      value: new Float32Array([safeBlack, safeWhite, dotShape, levelsFlags]),
+      value: new Float32Array([blackPoint, whitePoint, dotShape, flags]),
     },
   ];
 }

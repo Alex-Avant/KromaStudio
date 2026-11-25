@@ -10,31 +10,41 @@
     HalftoneExportKind,
     HalftoneExportResult,
     HalftoneImageStats,
+    HalftoneOutputGeometry,
     HalftonePreviewCanvases,
   } from '../types/halftone';
 
   // Props con valores por defecto para DTF.
   let {
     src,
-    lpi = 45,
-    angle = 45,
-    contrast = 1,
+    lpi = 35,
+    angle = 22.5,
+    brightness = 0,
+    contrast = 0,
     gamma = 1,
-    minDot = 0.01,
-    shadowPoint = 0.97,
+    minDot = 0.08,
+    maxDot = 1,
+    solidThreshold = 0.98,
+    solidEnabled = false,
+    edgeSmooth = true,
+    edgeProtect = true,
+    applicationMode = 'fades',
     dotShape = 'circle',
     dpi = 300,
     underbase = true,
     choke = 1,
-    colorMode = 'mono',
+    spread = 0,
+    colorMode = 'color',
     polarity = 'light',
     blackPoint = 0,
-    whitePoint = 1,
+    whitePoint = 255,
     shirtColor = '#111111',
     showUnderbase = true,
     underbaseStyle = 'dot',
     previewMode = 'fit',
     previewView = 'result',
+    outputWidth,
+    outputHeight,
     exportReady = $bindable(false),
     imageStats = $bindable<HalftoneImageStats | null>(null),
     width = '100%',
@@ -45,8 +55,10 @@
   let pixels = $state<Uint32Array<ArrayBuffer> | null>(null);
   let imageWidth = $state(0);
   let imageHeight = $state(0);
-  let logicalWidth = $state(0);
-  let logicalHeight = $state(0);
+  let sourceLogicalWidth = $state(0);
+  let sourceLogicalHeight = $state(0);
+  const logicalWidth = $derived(outputWidth && outputWidth > 0 ? outputWidth : sourceLogicalWidth);
+  const logicalHeight = $derived(outputHeight && outputHeight > 0 ? outputHeight : sourceLogicalHeight);
   let loading = $state(true);
   let error = $state<string | null>(null);
 
@@ -89,8 +101,8 @@
         pixels = prepared.pixels;
         imageWidth = prepared.width;
         imageHeight = prepared.height;
-        logicalWidth = prepared.logicalWidth;
-        logicalHeight = prepared.logicalHeight;
+        sourceLogicalWidth = prepared.logicalWidth;
+        sourceLogicalHeight = prepared.logicalHeight;
         imageStats = analyzePackedRgba(
           prepared.pixels,
           prepared.width,
@@ -139,14 +151,21 @@
       pixels: pixelData,
       lpi,
       angle,
+      brightness,
       contrast,
       gamma,
       minDot,
-      shadowPoint,
+      maxDot,
+      solidThreshold,
+      solidEnabled,
+      edgeSmooth,
+      edgeProtect,
+      applicationMode,
       dotShape,
       dpi,
       underbase,
       choke,
+      spread,
       underbaseStyle,
       colorMode,
       polarity,
@@ -292,7 +311,10 @@
     };
   }
 
-  export function exportPng(kind: HalftoneExportKind): Promise<HalftoneExportResult> {
+  export function exportPng(
+    kind: HalftoneExportKind,
+    geometry?: HalftoneOutputGeometry,
+  ): Promise<HalftoneExportResult> {
     if (!exportReady || !activeBitmap) {
       return Promise.reject(
         new Error('La imagen todavía se está preparando. Espera a que la vista previa termine.'),
@@ -304,14 +326,21 @@
       {
         lpi,
         angle,
+        brightness,
         contrast,
         gamma,
         minDot,
-        shadowPoint,
+        maxDot,
+        solidThreshold,
+        solidEnabled,
+        edgeSmooth,
+        edgeProtect,
+        applicationMode,
         dotShape,
         dpi,
         underbase,
         choke,
+        spread,
         underbaseStyle,
         colorMode,
         polarity,
@@ -321,6 +350,7 @@
       },
       kind,
       activeBitmap ?? undefined,
+      geometry,
     );
   }
 </script>

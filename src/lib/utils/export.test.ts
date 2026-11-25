@@ -1,23 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import type { HalftoneExportOptions } from './export';
-import { exportFilename, exportMetricsFor, requiredPasses } from './export';
+import {
+  exportFilename,
+  exportMetricsFor,
+  outputPixelDimensions,
+  requiredPasses,
+} from './export';
 
 const options: HalftoneExportOptions = {
   lpi: 45,
   angle: 22.5,
-  contrast: 1.2,
+  brightness: 0,
+  contrast: 20,
   gamma: 1.1,
-  minDot: 0.01,
-  shadowPoint: 0.97,
+  minDot: 0.08,
+  maxDot: 1,
+  solidThreshold: 0.98,
+  solidEnabled: false,
+  edgeSmooth: true,
+  edgeProtect: true,
+  applicationMode: 'fades',
   dotShape: 'circle',
   dpi: 300,
   underbase: true,
   choke: 2.5,
+  spread: 0,
   underbaseStyle: 'solid',
   colorMode: 'color',
   polarity: 'light',
   blackPoint: 0,
-  whitePoint: 1,
+  whitePoint: 255,
   shirtColor: '#111111',
 };
 
@@ -25,14 +37,14 @@ describe('export filenames', () => {
   it('describes tonal settings and polarity for the color separation', () => {
     const filename = exportFilename('color', options);
     expect(filename).toContain('kroma_circle_LPI45_ANG22.5_300DPI');
-    expect(filename).toContain('_C1.2_G1.1_MD1.0_SH97_BP0_WP100_light_color.png');
+    expect(filename).toContain('_BR0_C20_G1.1_MD8.0_XD100_BP0_WP255_MODEfades_light_color.png');
     expect(filename).not.toContain('_CHK');
     expect(filename).not.toContain('_solid_');
   });
 
   it('includes choke and base style for the white separation', () => {
     const filename = exportFilename('underbase', options);
-    expect(filename).toContain('_CHK2.5_solid_light_white.png');
+    expect(filename).toContain('_CHK2.5_SPR0_solid_light_white.png');
   });
 
   it('omits base details from composite when the underbase is disabled', () => {
@@ -51,14 +63,40 @@ describe('export filenames', () => {
       effectiveDpi: 150,
       exportScale: 0.5,
       exportPitch: 5,
+      physicalWidthIn: 3.4,
+      physicalHeightIn: 6.7,
       downscaled: true,
     });
     expect(filename).toContain('300DPI_eff150DPI');
+    expect(filename).toContain('SIZE3.4x6.7in');
     expect(filename).not.toContain('_CHK');
   });
 });
 
 describe('export metrics', () => {
+  it('derives true output pixels from physical dimensions and DPI', () => {
+    expect(outputPixelDimensions(1200, 600, 300)).toEqual({
+      width: 1200,
+      height: 600,
+      widthIn: 4,
+      heightIn: 2,
+    });
+    expect(outputPixelDimensions(1200, 600, 300, { widthIn: 5 })).toEqual({
+      width: 1500,
+      height: 750,
+      widthIn: 5,
+      heightIn: 2.5,
+    });
+    expect(outputPixelDimensions(1200, 600, 300, { widthIn: 5, heightIn: 2, mirror: true })).toMatchObject({
+      width: 1500,
+      height: 600,
+    });
+    expect(outputPixelDimensions(1200, 600, 300, { widthIn: 5, keepAspect: false })).toMatchObject({
+      width: 1500,
+      height: 600,
+    });
+  });
+
   it('keeps the requested DPI when no reduction is needed', () => {
     const metrics = exportMetricsFor(
       { width: 1024, height: 512, logicalWidth: 1024, logicalHeight: 512 },

@@ -61,6 +61,17 @@ export const QA_MIDTONE: QaFixture = {
   },
 };
 
+export const QA_NEAR_SOLID: QaFixture = {
+  id: 'near-solid',
+  name: 'Tono casi sólido para distinguir el modo de trama',
+  width: 256,
+  height: 256,
+  draw(ctx) {
+    ctx.fillStyle = 'rgb(252 252 252)';
+    ctx.fillRect(0, 0, this.width, this.height);
+  },
+};
+
 export const QA_TRANSPARENT: QaFixture = {
   id: 'transparent',
   name: 'Imagen completamente transparente',
@@ -76,6 +87,7 @@ export const QA_FIXTURES: readonly QaFixture[] = [
   QA_POLARITY_BLOCKS,
   QA_ALPHA_RAMP,
   QA_MIDTONE,
+  QA_NEAR_SOLID,
   QA_TRANSPARENT,
 ];
 

@@ -1,6 +1,7 @@
 import type { HalftonePolarity } from '../types/halftone';
 
 export type ScreenShape = 'circle' | 'ellipse' | 'diamond' | 'square' | 'line';
+export type ScreenApplicationMode = 'fades' | 'knockout' | 'full';
 
 export interface GridSample {
   gridX: number;
@@ -140,4 +141,72 @@ export function screenInk(coverage: number, threshold: number, aa = 0): number {
   const end = threshold + aa;
   const normalized = clamp01((coverage - start) / (end - start));
   return normalized * normalized * (3 - 2 * normalized);
+}
+
+/** Ajusta luminancia con la misma secuencia y escalas que coverage_from_source(). */
+export function adjustedTone(
+  luminance: number,
+  options: {
+    brightness: number;
+    contrast: number;
+    blackPoint: number;
+    whitePoint: number;
+    gamma: number;
+    polarity: HalftonePolarity;
+    alpha?: number;
+    maxDot?: number;
+  },
+): number {
+  const brightness = Math.min(100, Math.max(-100, options.brightness)) / 100;
+  const contrast = Math.min(100, Math.max(-100, options.contrast));
+  const shifted = clamp01(clamp01(luminance) + brightness);
+  const contrasted = clamp01((shifted - 0.5) * (1 + contrast / 100) + 0.5);
+  const black = Math.min(254, Math.max(0, options.blackPoint)) / 255;
+  const white = Math.min(
+    1,
+    Math.max(black + 1 / 255, Math.min(255, options.whitePoint) / 255),
+  );
+  const normalized = clamp01((contrasted - black) / Math.max(white - black, 1 / 255));
+  const coverage = toneCoverage(Math.pow(normalized, Math.min(2.5, Math.max(0.4, options.gamma))), options.polarity, options.alpha ?? 1);
+  return Math.min(coverage, clamp01(options.maxDot ?? 1));
+}
+
+/** Máscara visible tras el modo; knockout perfora solo los tonos medios. */
+export function applicationAlpha(
+  sourceAlpha: number,
+  coverage: number,
+  threshold: number,
+  mode: ScreenApplicationMode,
+  aa = 0,
+  minDot = 0,
+  solidThresholdEnabled = false,
+  solidThreshold = 0.98,
+): number {
+  const alpha = clamp01(sourceAlpha);
+  const tone = clamp01(coverage);
+  if (alpha === 0) return 0;
+
+  if (mode === 'knockout') {
+    const holeCoverage = Math.min(4 * tone * (1 - tone), 1);
+    return alpha * (1 - screenInk(holeCoverage, threshold, aa) * smoothStep(minDot * 0.5, minDot, holeCoverage));
+  }
+
+  if (tone === 0) return 0;
+  if (mode === 'fades' && alpha >= 0.999 && tone >= solidThreshold) return alpha;
+  if (solidThresholdEnabled && alpha >= 0.999 && tone >= solidThreshold) return alpha;
+
+  const minFade = smoothStep(minDot * 0.5, minDot, tone);
+  return screenInk(tone, threshold, aa) * minFade;
+}
+
+function smoothStep(edge0: number, edge1: number, value: number): number {
+  if (edge1 <= edge0) return value >= edge1 ? 1 : 0;
+  const t = clamp01((value - edge0) / (edge1 - edge0));
+  return t * t * (3 - 2 * t);
+}
+
+/** Cálculo de la dilatación/erosión efectiva de underbase. */
+export function underbaseOffset(choke: number, spread: number): { radius: number; operation: 'erode' | 'dilate' } {
+  const signed = Math.min(3, Math.max(0, choke)) - Math.min(3, Math.max(0, spread));
+  return { radius: Math.abs(signed), operation: signed >= 0 ? 'erode' : 'dilate' };
 }

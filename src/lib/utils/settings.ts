@@ -1,22 +1,38 @@
 import type {
+  HalftoneApplicationMode,
   HalftoneColorMode,
   HalftoneDotShape,
   HalftonePolarity,
   HalftoneUnderbaseStyle,
 } from '../types/halftone';
+import {
+  BOOLEAN_PARAMETER_REGISTRY,
+  ENUM_PARAMETER_REGISTRY,
+  HALFTONE_PARAMETER_REGISTRY,
+  validateBooleanParameter,
+  validateEnumParameter,
+  validateNumericParameter,
+} from './parameter-registry';
 
-/** Ajustes del motor que se conservan en el navegador entre sesiones. */
+/** Configuración persistida de procesamiento y previsualización. */
 export interface HalftoneSettings {
   lpi: number;
   angle: number;
+  brightness: number;
   contrast: number;
   gamma: number;
   minDot: number;
-  shadowPoint: number;
+  maxDot: number;
+  solidThreshold: number;
+  solidEnabled: boolean;
+  edgeSmooth: boolean;
+  edgeProtect: boolean;
+  applicationMode: HalftoneApplicationMode;
   dotShape: HalftoneDotShape;
   dpi: number;
   underbase: boolean;
   choke: number;
+  spread: number;
   underbaseStyle: HalftoneUnderbaseStyle;
   colorMode: HalftoneColorMode;
   polarity: HalftonePolarity;
@@ -27,82 +43,83 @@ export interface HalftoneSettings {
 }
 
 export const HALFTONE_DEFAULTS: HalftoneSettings = {
-  lpi: 45,
-  angle: 45,
-  contrast: 1,
-  gamma: 1,
-  minDot: 0.01,
-  shadowPoint: 0.97,
-  dotShape: 'circle',
-  dpi: 300,
-  underbase: true,
-  choke: 1,
-  underbaseStyle: 'dot',
-  colorMode: 'color',
-  polarity: 'light',
-  blackPoint: 0,
-  whitePoint: 1,
-  showUnderbase: true,
+  lpi: HALFTONE_PARAMETER_REGISTRY.lpi.defaultValue,
+  angle: HALFTONE_PARAMETER_REGISTRY.angle.defaultValue,
+  brightness: HALFTONE_PARAMETER_REGISTRY.brightness.defaultValue,
+  contrast: HALFTONE_PARAMETER_REGISTRY.contrast.defaultValue,
+  gamma: HALFTONE_PARAMETER_REGISTRY.gamma.defaultValue,
+  minDot: HALFTONE_PARAMETER_REGISTRY.minDot.defaultValue,
+  maxDot: HALFTONE_PARAMETER_REGISTRY.maxDot.defaultValue,
+  solidThreshold: HALFTONE_PARAMETER_REGISTRY.solidThreshold.defaultValue,
+  solidEnabled: BOOLEAN_PARAMETER_REGISTRY.solidEnabled.defaultValue,
+  edgeSmooth: BOOLEAN_PARAMETER_REGISTRY.edgeSmooth.defaultValue,
+  edgeProtect: BOOLEAN_PARAMETER_REGISTRY.edgeProtect.defaultValue,
+  applicationMode: ENUM_PARAMETER_REGISTRY.applicationMode.defaultValue,
+  dotShape: ENUM_PARAMETER_REGISTRY.dotShape.defaultValue,
+  dpi: HALFTONE_PARAMETER_REGISTRY.dpi.defaultValue,
+  underbase: BOOLEAN_PARAMETER_REGISTRY.underbase.defaultValue,
+  choke: HALFTONE_PARAMETER_REGISTRY.choke.defaultValue,
+  spread: HALFTONE_PARAMETER_REGISTRY.spread.defaultValue,
+  underbaseStyle: ENUM_PARAMETER_REGISTRY.underbaseStyle.defaultValue,
+  colorMode: ENUM_PARAMETER_REGISTRY.colorMode.defaultValue,
+  polarity: ENUM_PARAMETER_REGISTRY.polarity.defaultValue,
+  blackPoint: HALFTONE_PARAMETER_REGISTRY.blackPoint.defaultValue,
+  whitePoint: HALFTONE_PARAMETER_REGISTRY.whitePoint.defaultValue,
+  showUnderbase: BOOLEAN_PARAMETER_REGISTRY.showUnderbase.defaultValue,
   shirtColor: '#111111',
 };
 
-const STORAGE_KEY = 'kroma.halftone.settings.v1';
+// v2 inicia con los defaults profesionales nuevos; los valores v1 se conservan
+// en localStorage pero no se interpretan bajo una semántica distinta.
+const STORAGE_KEY = 'kroma.halftone.settings.v2';
 const SHIRT_PATTERN = /^#[0-9a-f]{6}$/i;
 
-function numberIn(value: unknown, fallback: number, min: number, max: number): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
-  return Math.min(max, Math.max(min, value));
-}
-
-function oneOf<T extends string>(
+function validateSettingNumber<K extends keyof typeof HALFTONE_PARAMETER_REGISTRY>(
+  id: K,
   value: unknown,
-  fallback: T,
-  options: readonly T[],
-): T {
-  return typeof value === 'string' && options.includes(value as T) ? (value as T) : fallback;
-}
-
-function booleanOr(value: unknown, fallback: boolean): boolean {
-  return typeof value === 'boolean' ? value : fallback;
+): number {
+  return validateNumericParameter(
+    id,
+    typeof value === 'number' ? value : Number.NaN,
+  );
 }
 
 export function loadHalftoneSettings(): HalftoneSettings {
   try {
-    const raw =
-      typeof localStorage === 'undefined'
-        ? null
-        : localStorage.getItem(STORAGE_KEY);
+    const raw = typeof localStorage === 'undefined' ? null : localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...HALFTONE_DEFAULTS };
 
     const data = JSON.parse(raw) as Partial<HalftoneSettings>;
+    const blackPoint = Math.min(254, validateSettingNumber('blackPoint', data.blackPoint));
+    const whitePoint = Math.min(
+      255,
+      Math.max(blackPoint + 1, validateSettingNumber('whitePoint', data.whitePoint)),
+    );
+
     return {
-      // Los límites coinciden con los controles visibles para que un valor
-      // restaurado nunca quede fuera del rango que muestra la interfaz.
-      lpi: numberIn(data.lpi, HALFTONE_DEFAULTS.lpi, 10, 120),
-      angle: numberIn(data.angle, HALFTONE_DEFAULTS.angle, 0, 180),
-      contrast: numberIn(data.contrast, HALFTONE_DEFAULTS.contrast, 0.5, 2.5),
-      gamma: numberIn(data.gamma, HALFTONE_DEFAULTS.gamma, 0.4, 2.5),
-      minDot: numberIn(data.minDot, HALFTONE_DEFAULTS.minDot, 0, 0.2),
-      shadowPoint: numberIn(data.shadowPoint, HALFTONE_DEFAULTS.shadowPoint, 0.8, 1),
-      dotShape: oneOf(data.dotShape, HALFTONE_DEFAULTS.dotShape, [
-        'circle',
-        'ellipse',
-        'diamond',
-        'square',
-        'line',
-      ]),
-      dpi: numberIn(data.dpi, HALFTONE_DEFAULTS.dpi, 72, 600),
-      underbase: booleanOr(data.underbase, HALFTONE_DEFAULTS.underbase),
-      choke: numberIn(data.choke, HALFTONE_DEFAULTS.choke, 0, 3),
-      underbaseStyle: oneOf(data.underbaseStyle, HALFTONE_DEFAULTS.underbaseStyle, [
-        'dot',
-        'solid',
-      ]),
-      colorMode: oneOf(data.colorMode, HALFTONE_DEFAULTS.colorMode, ['color', 'mono']),
-      polarity: oneOf(data.polarity, HALFTONE_DEFAULTS.polarity, ['light', 'dark']),
-      blackPoint: numberIn(data.blackPoint, HALFTONE_DEFAULTS.blackPoint, 0, 0.9),
-      whitePoint: numberIn(data.whitePoint, HALFTONE_DEFAULTS.whitePoint, 0.1, 1),
-      showUnderbase: booleanOr(data.showUnderbase, HALFTONE_DEFAULTS.showUnderbase),
+      lpi: validateSettingNumber('lpi', data.lpi),
+      angle: validateSettingNumber('angle', data.angle),
+      brightness: validateSettingNumber('brightness', data.brightness),
+      contrast: validateSettingNumber('contrast', data.contrast),
+      gamma: validateSettingNumber('gamma', data.gamma),
+      minDot: validateSettingNumber('minDot', data.minDot),
+      maxDot: validateSettingNumber('maxDot', data.maxDot),
+      solidThreshold: validateSettingNumber('solidThreshold', data.solidThreshold),
+      solidEnabled: validateBooleanParameter('solidEnabled', data.solidEnabled),
+      edgeSmooth: validateBooleanParameter('edgeSmooth', data.edgeSmooth),
+      edgeProtect: validateBooleanParameter('edgeProtect', data.edgeProtect),
+      applicationMode: validateEnumParameter('applicationMode', data.applicationMode),
+      dotShape: validateEnumParameter('dotShape', data.dotShape),
+      dpi: validateSettingNumber('dpi', data.dpi),
+      underbase: validateBooleanParameter('underbase', data.underbase),
+      choke: validateSettingNumber('choke', data.choke),
+      spread: validateSettingNumber('spread', data.spread),
+      underbaseStyle: validateEnumParameter('underbaseStyle', data.underbaseStyle),
+      colorMode: validateEnumParameter('colorMode', data.colorMode),
+      polarity: validateEnumParameter('polarity', data.polarity),
+      blackPoint,
+      whitePoint,
+      showUnderbase: validateBooleanParameter('showUnderbase', data.showUnderbase),
       shirtColor:
         typeof data.shirtColor === 'string' && SHIRT_PATTERN.test(data.shirtColor)
           ? data.shirtColor

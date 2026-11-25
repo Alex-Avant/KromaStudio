@@ -2,10 +2,12 @@ import type {
   HalftoneCanvasHandle,
   HalftoneExportKind,
   HalftoneExportResult,
+  HalftoneOutputGeometry,
 } from '../types/halftone';
 import { exportCalibrationSheet } from '../utils/calibration-export';
 import { exportCalibrationForRip } from '../utils/calibration-rip';
 import { exportHalftonePng, type HalftoneExportOptions } from '../utils/export';
+import { BOOLEAN_PARAMETER_REGISTRY, ENUM_PARAMETER_REGISTRY } from '../utils/parameter-registry';
 
 const EXPORT_LABELS: Record<HalftoneExportKind, string> = {
   color: 'separación de color',
@@ -19,9 +21,21 @@ export class ExportState {
   calibrating = $state(false);
   preparingRip = $state(false);
   lastExportTiming = $state<{ label: string; ms: number } | null>(null);
+  lastExportInfo = $state<{
+    width: number;
+    height: number;
+    requestedDpi?: number;
+    effectiveDpi?: number;
+    downscaled?: boolean;
+  } | null>(null);
   message = $state<string | null>(null);
   warning = $state<string | null>(null);
   error = $state<string | null>(null);
+  physicalWidthIn = $state<number | null>(null);
+  physicalHeightIn = $state<number | null>(null);
+  sizeUnit = $state<'in' | 'cm'>(ENUM_PARAMETER_REGISTRY.outputUnit.defaultValue);
+  keepAspect = $state(BOOLEAN_PARAMETER_REGISTRY.keepAspect.defaultValue);
+  mirror = $state(BOOLEAN_PARAMETER_REGISTRY.mirror.defaultValue);
 
   /** Handle del canvas de la vista previa, asignado por el editor. */
   canvas: HalftoneCanvasHandle | null = null;
@@ -30,6 +44,8 @@ export class ExportState {
   getOptions: () => HalftoneExportOptions = () => {
     throw new Error('Las opciones de exportación no están configuradas.');
   };
+
+  getGeometry: () => HalftoneOutputGeometry = () => ({ mirror: this.mirror });
 
   private downloadBlob(blob: Blob, filename: string): void {
     const url = URL.createObjectURL(blob);
@@ -58,6 +74,7 @@ export class ExportState {
     this.warning = null;
     this.error = null;
     this.lastExportTiming = null;
+    this.lastExportInfo = null;
   }
 
   async downloadPng(kind: HalftoneExportKind): Promise<void> {
@@ -71,8 +88,15 @@ export class ExportState {
 
     const startedAt = performance.now();
     try {
-      const result = await this.canvas.exportPng(kind);
+      const result = await this.canvas.exportPng(kind, this.getGeometry());
       this.downloadBlob(result.blob, result.filename);
+      this.lastExportInfo = {
+        width: result.width,
+        height: result.height,
+        requestedDpi: result.requestedDpi,
+        effectiveDpi: result.effectiveDpi,
+        downscaled: result.downscaled,
+      };
       const ms = result.durationMs ?? performance.now() - startedAt;
       this.lastExportTiming = { label: EXPORT_LABELS[kind], ms };
       this.warning = this.reductionWarning(result);

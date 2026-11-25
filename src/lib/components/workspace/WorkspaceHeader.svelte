@@ -10,14 +10,15 @@
 </script>
 
 <header class="app-header">
-  <div class="brand">
-    <img
-      class="brand-logo"
-      src="/kromastudio-logo.svg"
-      alt="KromaStudio · DTF AM Screen Lab"
-      width="420"
-      height="96"
-    />
+  <div class="brand" role="img" aria-label="KromaStudio · DTF AM Screen Lab">
+    <picture class="brand-mark">
+      <source media="(max-width: 640px)" srcset="/kromastudio-symbol.svg" />
+      <img class="brand-logo" src="/kromastudio-logo.svg" alt="" width="500" height="124" />
+    </picture>
+    <span class="mobile-brand-copy" aria-hidden="true">
+      <strong>KromaStudio</strong>
+      <small>DTF · AM SCREEN LAB</small>
+    </span>
   </div>
 
   <p class="document" title={doc.selectedName}>
@@ -43,7 +44,7 @@
     display: flex;
     align-items: center;
     gap: 1.25rem;
-    min-height: 66px;
+    min-height: 80px;
     padding: 0.65rem 1rem;
     border-bottom: 1px solid var(--border);
     background: var(--surface);
@@ -52,16 +53,20 @@
   .brand {
     display: flex;
     align-items: center;
-    min-width: 190px;
+    min-width: 260px;
     flex: 0 0 auto;
   }
 
+  .brand-mark { display: block; width: 250px; max-width: 100%; }
+
   .brand-logo {
     display: block;
-    width: 188px;
+    width: 100%;
     max-width: 100%;
     height: auto;
   }
+
+  .mobile-brand-copy { display: none; }
 
   .document {
     display: flex;
@@ -175,9 +180,14 @@
     .brand {
       min-width: 0;
       flex: 1 1 auto;
+      gap: 0.38rem;
     }
 
-    .brand-logo { width: clamp(112px, 35vw, 138px); }
+    .brand-mark { width: 32px; flex: 0 0 32px; }
+    .brand-logo { width: 32px; height: 32px; }
+    .mobile-brand-copy { display: grid; gap: 0.12rem; min-width: 0; line-height: 1.05; }
+    .mobile-brand-copy strong { color: var(--text); font-size: 0.74rem; font-weight: 700; white-space: nowrap; }
+    .mobile-brand-copy small { color: var(--cyan); font: 600 0.48rem/1.1 var(--mono); letter-spacing: 0.05em; white-space: nowrap; }
 
     .document {
       display: none;
@@ -213,6 +223,6 @@
       height: 12px;
     }
 
-    .brand-logo { width: clamp(100px, 32vw, 116px); }
+    .mobile-brand-copy small { display: none; }
   }
 </style>

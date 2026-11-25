@@ -16,6 +16,12 @@ export interface PackedImage {
   logicalHeight: number;
 }
 
+export interface BitmapPackingOptions {
+  /** Dimensiones lógicas de salida antes del eventual límite de GPU. */
+  logicalWidth?: number;
+  logicalHeight?: number;
+}
+
 // Deja margen para dos storage buffers (color y underbase) en GPUs móviles.
 const MAX_IMAGE_DIMENSION = 2048;
 
@@ -98,10 +104,13 @@ export async function loadImage(source: HalftoneImageSource): Promise<LoadedImag
 export function bitmapToPackedRgba(
   bitmap: ImageBitmap,
   maxDimension = MAX_IMAGE_DIMENSION,
+  options: BitmapPackingOptions = {},
 ): PackedImage {
-  const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
-  const width = Math.max(1, Math.round(bitmap.width * scale));
-  const height = Math.max(1, Math.round(bitmap.height * scale));
+  const logicalWidth = Math.max(1, Math.round(options.logicalWidth ?? bitmap.width));
+  const logicalHeight = Math.max(1, Math.round(options.logicalHeight ?? bitmap.height));
+  const scale = Math.min(1, maxDimension / Math.max(logicalWidth, logicalHeight));
+  const width = Math.max(1, Math.round(logicalWidth * scale));
+  const height = Math.max(1, Math.round(logicalHeight * scale));
 
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -122,8 +131,8 @@ export function bitmapToPackedRgba(
     pixels: new Uint32Array(data.buffer as ArrayBuffer, data.byteOffset, width * height),
     width,
     height,
-    logicalWidth: bitmap.width,
-    logicalHeight: bitmap.height,
+    logicalWidth,
+    logicalHeight,
   };
 }
 

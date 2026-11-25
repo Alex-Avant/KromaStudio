@@ -4,6 +4,9 @@ export type HalftoneImageSource = ImageBitmap | Blob | string;
 /** Color de los puntos del semitono. */
 export type HalftoneColorMode = 'color' | 'mono';
 
+/** Aplicación tonal de la pantalla AM. */
+export type HalftoneApplicationMode = 'fades' | 'knockout' | 'full';
+
 /** Geometría disponible para los puntos de la trama. */
 export type HalftoneDotShape = 'circle' | 'ellipse' | 'diamond' | 'square' | 'line';
 
@@ -15,6 +18,14 @@ export type HalftonePreviewView = 'result' | 'original' | 'underbase' | 'mask' |
 
 /** Estilo de la base blanca: tramada con la misma geometría de puntos o sólida. */
 export type HalftoneUnderbaseStyle = 'dot' | 'solid';
+
+/** Geometría física opcional solicitada para una exportación concreta. */
+export interface HalftoneOutputGeometry {
+  widthIn?: number;
+  heightIn?: number;
+  keepAspect?: boolean;
+  mirror?: boolean;
+}
 
 /** Estadísticas de la imagen fuente para el preflight de exportación. */
 export interface HalftoneImageStats {
@@ -37,18 +48,30 @@ export type HalftonePolarity = 'light' | 'dark';
 
 /** Parámetros del motor de semitono. */
 export interface HalftoneOptions {
-  /** Líneas por pulgada de la trama. DTF suele trabajar entre 35 y 60 LPI. */
+  /** Líneas por pulgada de la trama. */
   lpi: number;
   /** Ángulo de la rejilla en grados. */
   angle: number;
-  /** Multiplicador de contraste alrededor de 0.5. 1 = sin cambios. */
+  /** Contraste aditivo centrado en cero, rango -100..100. */
   contrast: number;
+  /** Brillo aditivo, rango -100..100. */
+  brightness: number;
   /** Exponente de cobertura; valores mayores reducen los tonos medios. */
   gamma: number;
   /** Cobertura mínima; los puntos más débiles se descartan. */
   minDot: number;
-  /** Cobertura a partir de la cual la celda se vuelve sólida. */
-  shadowPoint: number;
+  /** Cobertura máxima relativa de la celda (0..1). */
+  maxDot: number;
+  /** Umbral de sólidos configurable (0..1). */
+  solidThreshold: number;
+  /** Modo de aplicación de la trama. */
+  applicationMode: HalftoneApplicationMode;
+  /** Suavizado de la frontera de los puntos. */
+  edgeSmooth: boolean;
+  /** Evita el fallback de promedio cuando la celda no se resuelve. */
+  edgeProtect: boolean;
+  /** Habilita el umbral opcional para preservar sólidos. */
+  solidEnabled: boolean;
   /** Forma geométrica de los puntos. */
   dotShape: HalftoneDotShape;
   /** Resolución de salida en píxeles por pulgada. */
@@ -57,9 +80,9 @@ export interface HalftoneOptions {
   colorMode: HalftoneColorMode;
   /** Extremo tonal que produce tinta. */
   polarity: HalftonePolarity;
-  /** Luminancia por debajo de la cual el píxel se vuelve transparente. */
+  /** Punto negro de entrada en niveles 0..255. */
   blackPoint: number;
-  /** Luminancia que se remapea a blanco para aumentar el contraste. */
+  /** Punto blanco de entrada en niveles 0..255. */
   whitePoint: number;
 }
 
@@ -69,6 +92,8 @@ export interface UnderbaseOptions {
   enabled: boolean;
   /** Erosión de la máscara de tinta, en píxeles de salida (0 a 3). */
   choke: number;
+  /** Expansión de la máscara de tinta, en píxeles de salida (0 a 3). */
+  spread: number;
   /** Base tramada (misma geometría de puntos) o sólida bajo el diseño. */
   style: HalftoneUnderbaseStyle;
 }
@@ -78,14 +103,21 @@ export interface HalftoneCanvasProps {
   src: HalftoneImageSource;
   lpi?: number;
   angle?: number;
+  brightness?: number;
   contrast?: number;
   gamma?: number;
   minDot?: number;
-  shadowPoint?: number;
+  maxDot?: number;
+  solidThreshold?: number;
+  solidEnabled?: boolean;
+  edgeSmooth?: boolean;
+  edgeProtect?: boolean;
+  applicationMode?: HalftoneApplicationMode;
   dotShape?: HalftoneDotShape;
   dpi?: number;
   underbase?: boolean;
   choke?: number;
+  spread?: number;
   colorMode?: HalftoneColorMode;
   polarity?: HalftonePolarity;
   blackPoint?: number;
@@ -93,6 +125,8 @@ export interface HalftoneCanvasProps {
   shirtColor?: string;
   showUnderbase?: boolean;
   underbaseStyle?: HalftoneUnderbaseStyle;
+  outputWidth?: number;
+  outputHeight?: number;
   previewMode?: HalftonePreviewMode;
   previewView?: HalftonePreviewView;
   /** Indica si la imagen actual ya está lista para exportar. */
@@ -129,7 +163,10 @@ export interface HalftonePreviewCanvases {
 /** API pública expuesta por HalftoneCanvas mediante bind:this. */
 export interface HalftoneCanvasHandle {
   getPreviewCanvases(): HalftonePreviewCanvases;
-  exportPng(kind: HalftoneExportKind): Promise<HalftoneExportResult>;
+  exportPng(
+    kind: HalftoneExportKind,
+    geometry?: HalftoneOutputGeometry,
+  ): Promise<HalftoneExportResult>;
 }
 
 /**

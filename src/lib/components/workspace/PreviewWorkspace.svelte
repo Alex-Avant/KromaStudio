@@ -8,10 +8,12 @@
   interface Props {
     editor: EditorState;
     doc: DocumentState;
+    outputWidth?: number;
+    outputHeight?: number;
     onCanvas?: (handle: HalftoneCanvasHandle | null) => void;
   }
 
-  let { editor, doc, onCanvas }: Props = $props();
+  let { editor, doc, outputWidth, outputHeight, onCanvas }: Props = $props();
 
   let canvasRef = $state<HalftoneCanvasHandle | null>(null);
   let canvasArea: HTMLDivElement | null = $state(null);
@@ -24,8 +26,8 @@
     const areaHeight = canvasArea.clientHeight;
     if (!areaWidth || !areaHeight) return;
 
-    const imageWidth = doc.imageStats?.width ?? areaWidth;
-    const imageHeight = doc.imageStats?.height ?? areaHeight;
+    const imageWidth = outputWidth ?? doc.imageStats?.width ?? areaWidth;
+    const imageHeight = outputHeight ?? doc.imageStats?.height ?? areaHeight;
     const scale = Math.min(areaWidth / imageWidth, areaHeight / imageHeight);
     fitFrameStyle = `--fit-width: ${imageWidth * scale}px; --fit-height: ${imageHeight * scale}px;`;
   }
@@ -33,6 +35,8 @@
   $effect(() => {
     doc.imageStats?.width;
     doc.imageStats?.height;
+    outputWidth;
+    outputHeight;
     updateFitFrame();
   });
 
@@ -79,14 +83,21 @@
         src={doc.source}
         lpi={editor.lpi}
         angle={editor.angle}
+        brightness={editor.brightness}
         contrast={editor.contrast}
         gamma={editor.gamma}
         minDot={editor.minDot}
-        shadowPoint={editor.shadowPoint}
+        maxDot={editor.maxDot}
+        solidThreshold={editor.solidThreshold}
+        solidEnabled={editor.solidEnabled}
+        edgeSmooth={editor.edgeSmooth}
+        edgeProtect={editor.edgeProtect}
+        applicationMode={editor.applicationMode}
         dotShape={editor.dotShape}
         dpi={editor.dpi}
         underbase={editor.underbase}
         choke={editor.choke}
+        spread={editor.spread}
         underbaseStyle={editor.underbaseStyle}
         colorMode={editor.colorMode}
         polarity={editor.polarity}
@@ -96,6 +107,8 @@
         showUnderbase={editor.showUnderbase}
         previewMode={editor.previewMode}
         previewView={editor.previewView}
+        {outputWidth}
+        {outputHeight}
         bind:exportReady={doc.exportReady}
         bind:imageStats={doc.imageStats}
       />

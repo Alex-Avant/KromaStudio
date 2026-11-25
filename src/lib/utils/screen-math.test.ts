@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   cellCenterCanvas,
   cellSizePx,
+  adjustedTone,
+  applicationAlpha,
   circleCellArea,
   diamondCellArea,
   ellipseCellArea,
@@ -9,6 +11,7 @@ import {
   screenInk,
   screenThreshold,
   toneCoverage,
+  underbaseOffset,
   type ScreenShape,
 } from './screen-math';
 
@@ -142,5 +145,49 @@ describe('tone polarity and coverage', () => {
     expect(low).toBeLessThan(middle);
     expect(middle).toBeLessThan(high);
     expect(high).toBe(1);
+  });
+});
+
+describe('professional tone and mode semantics', () => {
+  const neutralTone = {
+    brightness: 0,
+    contrast: 0,
+    blackPoint: 0,
+    whitePoint: 255,
+    gamma: 1,
+    polarity: 'light' as const,
+  };
+
+  it('applies brightness and centered additive contrast before the screen', () => {
+    expect(adjustedTone(0.25, neutralTone)).toBeCloseTo(0.25, 6);
+    expect(adjustedTone(0.25, { ...neutralTone, brightness: 50 })).toBeCloseTo(0.75, 6);
+    expect(adjustedTone(0.25, { ...neutralTone, contrast: -100 })).toBeCloseTo(0.5, 6);
+    expect(adjustedTone(0.25, { ...neutralTone, contrast: 100 })).toBeCloseTo(0, 6);
+  });
+
+  it('maps 8-bit levels, polarity and maximum dot coverage', () => {
+    const mid = adjustedTone(128 / 255, {
+      ...neutralTone,
+      blackPoint: 64,
+      whitePoint: 192,
+      maxDot: 0.6,
+    });
+    expect(mid).toBeCloseTo(0.5, 2);
+    expect(adjustedTone(0.5, { ...neutralTone, polarity: 'dark' })).toBeCloseTo(0.5, 6);
+    expect(adjustedTone(1, { ...neutralTone, maxDot: 0.7 })).toBeCloseTo(0.7, 6);
+  });
+
+  it('distinguishes fades-only solids, full screens and midtone knockout alpha', () => {
+    expect(applicationAlpha(1, 0.99, 0.995, 'fades', 0, 0.08, false, 0.98)).toBe(1);
+    expect(applicationAlpha(1, 0.99, 0.995, 'full', 0, 0.08, false, 0.98)).toBe(0);
+    expect(applicationAlpha(1, 0.5, 0.5, 'knockout', 0, 0.08)).toBe(0);
+    expect(applicationAlpha(1, 0, 0.5, 'knockout', 0, 0.08)).toBe(1);
+    expect(applicationAlpha(1, 1, 0.5, 'knockout', 0, 0.08)).toBe(1);
+  });
+
+  it('combines choke and spread as a deterministic net morphology operation', () => {
+    expect(underbaseOffset(1, 0.5)).toEqual({ radius: 0.5, operation: 'erode' });
+    expect(underbaseOffset(1, 2)).toEqual({ radius: 1, operation: 'dilate' });
+    expect(underbaseOffset(2, 2)).toEqual({ radius: 0, operation: 'erode' });
   });
 });

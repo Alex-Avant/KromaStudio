@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { clampNumberInput, handlePercentInput, rangeProgressPercent } from './inputs';
+import {
+  clampNumberInput,
+  clampRegisteredInput,
+  handlePercentInput,
+  rangeProgressPercent,
+} from './inputs';
 
 function fakeEvent(value: string): Event {
   return { currentTarget: { value } } as unknown as Event;
@@ -35,5 +40,13 @@ describe('numeric inputs', () => {
     expect(rangeProgressPercent(-1, 0, 10)).toBe(0);
     expect(rangeProgressPercent(12, 0, 10)).toBe(100);
     expect(rangeProgressPercent(5, 10, 10)).toBe(0);
+  });
+
+  it('converts registered display units and applies registered limits', () => {
+    let value = 0;
+    clampRegisteredInput(fakeEvent('8'), (next) => (value = next), 'minDot');
+    expect(value).toBe(0.08);
+    clampRegisteredInput(fakeEvent('500'), (next) => (value = next), 'lpi');
+    expect(value).toBe(60);
   });
 });

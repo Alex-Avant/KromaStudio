@@ -11,6 +11,7 @@
   import { DocumentState } from './lib/state/document.svelte';
   import { EditorState } from './lib/state/editor.svelte';
   import { ExportState } from './lib/state/export.svelte';
+  import { outputPixelDimensions } from './lib/utils/export';
   import { loadHalftoneSettings, saveHalftoneSettings } from './lib/utils/settings';
 
   // Estado del editor, documento y exportación.
@@ -21,20 +22,48 @@
   exporter.getOptions = () => ({
     lpi: editor.lpi,
     angle: editor.angle,
+    brightness: editor.brightness,
     contrast: editor.contrast,
     gamma: editor.gamma,
     minDot: editor.minDot,
-    shadowPoint: editor.shadowPoint,
+    maxDot: editor.maxDot,
+    solidThreshold: editor.solidThreshold,
+    solidEnabled: editor.solidEnabled,
+    edgeSmooth: editor.edgeSmooth,
+    edgeProtect: editor.edgeProtect,
+    applicationMode: editor.applicationMode,
     dotShape: editor.dotShape,
     dpi: editor.dpi,
     underbase: editor.underbase,
     choke: editor.choke,
+    spread: editor.spread,
     underbaseStyle: editor.underbaseStyle,
     colorMode: editor.colorMode,
     polarity: editor.polarity,
     blackPoint: editor.blackPoint,
     whitePoint: editor.safeWhitePoint,
     shirtColor: editor.shirtColor,
+  });
+
+  exporter.getGeometry = () => ({
+    widthIn: exporter.physicalWidthIn ?? undefined,
+    heightIn: exporter.physicalHeightIn ?? undefined,
+    keepAspect: exporter.keepAspect,
+    mirror: exporter.mirror,
+  });
+
+  const outputGeometry = $derived.by(() => {
+    if (!doc.imageStats) return null;
+    return outputPixelDimensions(
+      doc.imageStats.width,
+      doc.imageStats.height,
+      editor.dpi,
+      {
+        widthIn: exporter.physicalWidthIn ?? undefined,
+        heightIn: exporter.physicalHeightIn ?? undefined,
+        keepAspect: exporter.keepAspect,
+      },
+    );
   });
 
   const SECTION_IDS: Record<WorkspaceSection, string | null> = {
@@ -118,7 +147,7 @@
 
   // Mantiene el blanco por encima del negro cuando se sube el black point.
   $effect(() => {
-    const minWhite = Math.max(0.1, editor.blackPoint + 0.01);
+    const minWhite = Math.min(255, editor.blackPoint + 1);
     if (editor.whitePoint < minWhite) editor.whitePoint = minWhite;
   });
 
@@ -149,6 +178,8 @@
       <PreviewWorkspace
         {editor}
         {doc}
+        outputWidth={outputGeometry?.width}
+        outputHeight={outputGeometry?.height}
         onCanvas={(handle) => {
           exporter.canvas = handle;
         }}

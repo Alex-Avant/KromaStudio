@@ -22,11 +22,20 @@
   const dimensions = $derived(
     doc.imageStats ? `${doc.imageStats.width} × ${doc.imageStats.height} px` : '—',
   );
+  const outputWidthIn = $derived(
+    exporter.physicalWidthIn ?? (doc.imageStats ? doc.imageStats.width / Math.max(1, editor.dpi) : null),
+  );
+  const outputHeightIn = $derived(
+    exporter.physicalHeightIn ?? (doc.imageStats ? doc.imageStats.height / Math.max(1, editor.dpi) : null),
+  );
+  const outputPixels = $derived(
+    outputWidthIn !== null && outputHeightIn !== null
+      ? `${Math.round(outputWidthIn * editor.dpi)} × ${Math.round(outputHeightIn * editor.dpi)} px`
+      : '—',
+  );
   const outputSize = $derived(
-    doc.imageStats
-      ? `${(doc.imageStats.width / Math.max(1, editor.dpi)).toFixed(2)} × ${(
-          doc.imageStats.height / Math.max(1, editor.dpi)
-        ).toFixed(2)} in`
+    outputWidthIn !== null && outputHeightIn !== null
+      ? `${(outputWidthIn * (exporter.sizeUnit === 'cm' ? 2.54 : 1)).toFixed(2)} × ${(outputHeightIn * (exporter.sizeUnit === 'cm' ? 2.54 : 1)).toFixed(2)} ${exporter.sizeUnit}`
       : '—',
   );
   const state = $derived(
@@ -42,12 +51,16 @@
     <span class="document-name">{doc.selectedName}</span>
   </span>
   <span class="item source-value">
-    <span class="key">Dimensiones</span>
+    <span class="key">Fuente px</span>
     <span>{dimensions}</span>
   </span>
   <span class="item source-value" title="El navegador no conserva los metadatos DPI originales al decodificar la imagen.">
     <span class="key">DPI fuente</span>
     <span>—</span>
+  </span>
+  <span class="item output-size">
+    <span class="key">Salida px</span>
+    <span>{outputPixels}</span>
   </span>
   <span class="item output-size">
     <span class="key">Tamaño salida</span>
@@ -57,6 +70,9 @@
   <span class="item output-value"><span class="key">LPI</span><span>{editor.lpi}</span></span>
   <span class="item output-value"><span class="key">Zoom</span><span>{zoom}</span></span>
   <span class="item output-value"><span class="key">Trama</span><span>{screen}</span></span>
+  {#if exporter.lastExportInfo?.downscaled}
+    <span class="item effective-dpi"><span class="key">DPI efectivo última salida</span><span>{Math.round(exporter.lastExportInfo.effectiveDpi ?? 0)}</span></span>
+  {/if}
   {#if exporter.lastExportTiming}
     <span class="item export-timing"><span class="key">Export</span><span>{Math.round(exporter.lastExportTiming.ms)} ms</span></span>
   {/if}
@@ -128,5 +144,6 @@
     .item:not(.document-item) { flex-wrap: wrap; gap: 0.12rem 0.28rem; white-space: normal; }
     .state { grid-column: 3; grid-row: 1; justify-self: end; white-space: nowrap; }
     .export-timing { grid-column: 1 / -1; }
+    .effective-dpi { grid-column: 1 / -1; }
   }
 </style>

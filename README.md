@@ -16,26 +16,28 @@ En Termux, si un script responde `<bin>: not found`, ejecuta npm con `LD_PRELOAD
 
 ## Motor de semitono
 
-- Rejilla AM configurable mediante LPI, DPI y ángulo, con presets de partida (25/35/45 LPI y 22,5°/45°).
+- Rejilla AM configurable mediante LPI, DPI y ángulo; defaults de partida 35 LPI y 22,5°.
 - Puntos de círculo, elipse, diamante, cuadrado o línea.
-- Screen AM por umbral en cada píxel, como Bitmap > Halftone Screen de Photoshop: la posición de las celdas es fija y el tamaño del punto sigue la tonalidad local.
+- Screen AM por umbral en cada píxel: la posición de las celdas es fija y el tamaño del punto sigue la tonalidad local. Es un modelo AM determinista; no se certifica equivalencia con Photoshop.
 - Una muestra de color, luminancia y alfa por píxel para conservar tipografía, líneas finas y contornos.
-- Contraste, niveles, compensación tonal gamma, punto mínimo y sombras sólidas.
+- Brillo y contraste aditivos (−100…+100), gamma, niveles 0–255, punto mínimo y cobertura máxima.
+- Tres modos reales: **Fades Only** conserva regiones cercanas a sólido; **Knockout Shirt** genera huecos alfa en medios tonos; **Full Halftone** aplica la pantalla AM en toda la imagen.
 - Polaridad tonal explícita: **Luces imprimen** reproduce el flujo de referencia de Photoshop y **Sombras imprimen** invierte qué extremo tonal forma los puntos, sin invertir los colores ni el alfa.
 - El último ajuste se guarda en el navegador; **Restaurar** vuelve a los valores iniciales.
 - El punto mínimo se funde suavemente en vez de desaparecer de golpe.
 - El alfa fuente modifica el área del punto en vez de crear grandes regiones de tinta semitransparente.
 - Filtrado bilinear con RGB premultiplicado y antialiasing basado en derivadas.
 - Modo monocromo negro o color original. El modo color es un efecto monocanal, no una separación CMYK.
-- Underbase blanco tramado o sólido y choke calculados a partir de la misma máscara de puntos que la capa de color.
+- Underbase blanco tramado o sólido, choke y spread calculados desde la máscara visible del modo actual.
 - Vista de comparación: resultado, imagen original, máscara de impresión y base blanca.
-- Controles numéricos editables junto a los sliders, presets y restauración de ajustes; los grupos se pueden plegar.
+- Registro central de parámetros con rangos, unidades y validación; cuatro presets reproducibles y estado «Modificado»; controles numéricos junto a sliders.
+- Presets iniciales: **DTF Standard** (35 LPI), **Fine Detail** (45 LPI), **Vintage** (Knockout, 25 LPI) y **Soft Fade** (35 LPI). Son puntos de partida, no perfiles certificados.
 
 Cuando la trama no se puede resolver en el preview, el shader muestra su cobertura media en lugar de cambiar silenciosamente el LPI. Una exportación que necesita menos de un píxel por celda se rechaza con un error explicativo.
 
 ## Preview y exportación
 
-El editor usa un Workspace de tres zonas: barra de herramientas a la izquierda (Imagen, Ajustes, Halftone, Exportar; Capas llegará más adelante), lienzo central con vista, zoom y comparación, e inspector a la derecha con los grupos Imagen, Trama, Ajustes tonales, Base blanca y Exportar. La barra inferior muestra dimensiones, tamaño físico, DPI, LPI, zoom y estado real del procesamiento.
+El editor usa un Workspace de tres zonas: navegación (Imagen, Ajustes, Halftone, Separaciones y Exportar), lienzo central con vistas/zoom/comparación e inspector con controles agrupados por responsabilidad. La navegación móvil abre los mismos paneles en una hoja inferior.
 
 El buffer de preview se limita a 2048 px por lado, pero la rejilla usa las dimensiones lógicas originales de la imagen. Preview y exportación conservan así el mismo número y fase de celdas aunque utilicen buffers de muestreo diferentes.
 
@@ -43,7 +45,7 @@ La escala **Ajustar** adapta la imagen al panel; **100 %** muestra un píxel ló
 
 La vista **Comparar** superpone el original y el resultado con un divisor arrastrable; ambos lados comparten la misma resolución de preview y posición. También puede moverse el divisor con las flechas del teclado.
 
-Se pueden descargar PNG transparentes de color y underbase, además de un composite sobre el color de camiseta seleccionado. **Color** es la separación de tinta (sin blanco ni choke); **Base blanca** aplica el estilo de base y el choke; **Composite** combina ambos. Las descargas se habilitan cuando la imagen actual terminó de cargarse. El nombre del archivo incluye polaridad y ajustes tonales; choke y estilo de base solo aparecen cuando afectan a la capa exportada. El DPI controla la geometría de la trama y se guarda como metadatos físicos (pHYs) en el PNG. Si la GPU debe reducir los píxeles, se conservan el tamaño físico y el LPI bajando el DPI efectivo; la app muestra un aviso y el archivo declara ambos DPI.
+Se pueden descargar PNG transparentes de color y underbase, además de un composite sobre la camiseta seleccionada. **Color** es la placa de tinta; **Base blanca** es la máscara de blanco; **Composite** combina ambas. Exportar permite especificar tamaño físico en pulgadas/cm, DPI, mantener proporción y espejo horizontal. El buffer se remuestrea a las dimensiones físicas solicitadas; pHYs declara el DPI efectivo. Si la GPU reduce píxeles, se conserva el tamaño físico bajando el DPI efectivo. El DPI original no se conserva al decodificar la fuente y se muestra como no disponible; no se inventa. La marca nunca se imprime en los PNG.
 
 Antes de exportar, el **preflight** muestra dimensiones, tamaño físico estimado, porcentaje de alfa y píxeles semitransparentes. Avisa —sin bloquear ni modificar la imagen— cuando una fuente opaca con bordes oscuros puede imprimir ese fondo en modo Sombras, o cuando el tratamiento del alfa parcial depende del RIP.
 
@@ -63,6 +65,10 @@ KromaStudio genera una trama artística en el PNG; no sustituye el screening, lo
 
 ## Verificación
 
-`npm run check`, `npm run build` y `npm test`. Las pruebas de Vitest cubren geometría del screen, configuración persistida, empaquetado de polaridad/base, nombres de exportación, calibración y metadatos pHYs. No compilan WGSL ni leen píxeles de la GPU.
+`npm run check`, `npm run build` y `npm test`. Las pruebas cubren geometría/tone modes, parámetros/presets, configuración persistida, dimensiones físicas, nombres de exportación, calibración y metadatos pHYs. No leen píxeles de la GPU.
 
-Para una comprobación real del render/export, abre **`/qa.html`** con `npm run dev` en un navegador con WebGPU. La página exporta fixtures sintéticos y verifica dimensiones, DPI y pHYs, monotonía y precisión de cobertura en las cinco formas, polaridad, transparencia, alfa, coherencia entre color y underbase, frecuencia real en el raster, DPI efectivo con reducción y la matriz 25/35/45 LPI × 300/600 DPI. Permite descargar un informe JSON. El submit/toBlob de Chromium headless con SwiftShader en Termux tiene limitaciones conocidas, así que esa página debe ejecutarse en un navegador WebGPU real.
+Para una comprobación real del render/export, abre **`/qa.html`** con `npm run dev` en un navegador con WebGPU. La página exporta fixtures sintéticos y verifica dimensiones, DPI/pHYs, monotonía y cobertura en las cinco formas, polaridad, transparencia, underbase, modos Fades/Knockout/Full, espejo, frecuencia real y redimensionado físico. No certifica equivalencia con Photoshop. Chromium headless con SwiftShader en Termux compila el shader, pero su submit/toBlob tiene limitaciones conocidas; para validar píxeles, ejecútala en un navegador WebGPU real.
+
+## Identidad de marca
+
+Los recursos SVG transparentes están en `public/kromastudio-logo.svg`, `kromastudio-symbol.svg` y `kromastudio-monochrome.svg`. El favicon SVG y los iconos PNG 192/512 alimentan también `manifest.webmanifest`.

@@ -65,16 +65,15 @@ export async function composeCalibrationSheet(
       margin + summaryFont * 2.2,
     );
     ctx.fillText(
-      `Contraste ${options.contrast} · Gamma ${options.gamma} · ` +
-        `Punto mínimo ${(options.minDot * 100).toFixed(1)} % · ` +
-        `Sombras ${(options.shadowPoint * 100).toFixed(0)} % · ` +
-        `Niveles ${(options.blackPoint * 100).toFixed(0)}/${(options.whitePoint * 100).toFixed(0)} %`,
+      `Brillo ${options.brightness} · Contraste ${options.contrast} · Gamma ${options.gamma} · ` +
+        `Punto ${(options.minDot * 100).toFixed(1)}–${(options.maxDot * 100).toFixed(0)} % · ` +
+        `Niveles ${Math.round(options.blackPoint)}/${Math.round(options.whitePoint)}`,
       margin,
       margin + summaryFont * 4,
     );
     ctx.fillText(
       options.underbase
-        ? `Underbase ${options.underbaseStyle === 'solid' ? 'sólida' : 'tramada'} · choke ${options.choke} px`
+        ? `Underbase ${options.underbaseStyle === 'solid' ? 'sólida' : 'tramada'} · choke ${options.choke} px · spread ${options.spread} px`
         : 'Underbase desactivado',
       margin,
       margin + summaryFont * 5.8,

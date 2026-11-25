@@ -43,13 +43,17 @@ export function buildPreflightWarnings(
   return warnings;
 }
 
-export function preflightSummary(stats: HalftoneImageStats, dpi: number): string {
+export function preflightSummary(
+  stats: HalftoneImageStats,
+  dpi: number,
+  physicalWidthIn = stats.width / Math.max(1, dpi),
+  physicalHeightIn = stats.height / Math.max(1, dpi),
+): string {
   const safeDpi = Math.max(1, dpi);
-  const widthIn = stats.width / safeDpi;
-  const heightIn = stats.height / safeDpi;
   return (
     `Fuente ${stats.width} × ${stats.height} px · ` +
-    `${widthIn.toFixed(2)} × ${heightIn.toFixed(2)} in a ${safeDpi} DPI · ` +
+    `Salida ${Math.round(physicalWidthIn * safeDpi)} × ${Math.round(physicalHeightIn * safeDpi)} px · ` +
+    `${physicalWidthIn.toFixed(2)} × ${physicalHeightIn.toFixed(2)} in a ${safeDpi} DPI · ` +
     `alfa ${(stats.transparentRatio * 100).toFixed(1)} % · ` +
     `parcial ${(stats.partialAlphaRatio * 100).toFixed(1)} %`
   );
